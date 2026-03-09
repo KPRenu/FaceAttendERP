@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+deepface
+opencv-python
+supabase
+python-dotenv
+numpy
+pillow
+requests
