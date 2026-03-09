@@ -1,9 +1,10 @@
 fastapi
 uvicorn
-deepface
-opencv-python
+deepface>=0.0.90
+opencv-python-headless
 supabase
 python-dotenv
-numpy
+numpy<2.0.0
 pillow
 requests
+tf-keras
