@@ -1,7 +1,7 @@
 fastapi
 uvicorn
-tensorflow-cpu==2.15.0
-deepface==0.0.93
+tensorflow-cpu<2.16.0
+deepface>=0.0.90
 opencv-python-headless
 supabase
 python-dotenv
