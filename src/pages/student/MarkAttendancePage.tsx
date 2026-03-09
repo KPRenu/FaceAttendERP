@@ -118,7 +118,8 @@ const MarkAttendancePage = () => {
     }
 
     try {
-      const response = await fetch("http://localhost:8000/verify-face", {
+      const aiServerUrl = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
+      const response = await fetch(`${aiServerUrl}/verify-face`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: user.id, image: imageSrc })

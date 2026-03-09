@@ -313,7 +313,8 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
           });
           const base64Image = await base64Promise;
 
-          const verifyRes = await fetch("http://localhost:8000/generate-embedding", {
+          const aiServerUrl = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
+          const verifyRes = await fetch(`${aiServerUrl}/generate-embedding`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ user_id: userId, image: base64Image })

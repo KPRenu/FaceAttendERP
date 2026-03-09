@@ -137,7 +137,8 @@ const AdminUsersPage = () => {
           toast({ title: "Processing", description: "Preparing image for verification..." });
           const base64Image = await imageUrlToBase64(userToVerify.avatar_url);
 
-          const response = await fetch("http://localhost:8000/generate-embedding", {
+          const aiServerUrl = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
+          const response = await fetch(`${aiServerUrl}/generate-embedding`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ user_id: userId, image: base64Image })
@@ -198,7 +199,8 @@ const AdminUsersPage = () => {
 
     try {
       // 1. Delete face patterns if they exist (local face_server)
-      await fetch("http://localhost:8000/delete-user", {
+      const aiServerUrl = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
+      await fetch(`${aiServerUrl}/delete-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userToDelete.user_id })
@@ -261,7 +263,8 @@ const AdminUsersPage = () => {
           const user = users.find(u => u.user_id === id);
           if (user?.avatar_url) {
             const base64Image = await imageUrlToBase64(user.avatar_url);
-            await fetch("http://localhost:8000/generate-embedding", {
+            const aiServerUrl = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
+            await fetch(`${aiServerUrl}/generate-embedding`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ user_id: id, image: base64Image })
@@ -352,7 +355,8 @@ const AdminUsersPage = () => {
 
     for (const userId of ids) {
       try {
-        await fetch("http://localhost:8000/delete-user", {
+        const aiServerUrl = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
+        await fetch(`${aiServerUrl}/delete-user`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: userId })
