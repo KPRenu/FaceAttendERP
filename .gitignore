@@ -40,3 +40,11 @@ supabase/config.toml
 # Redundant / Debug
 reproduce_issue.js
 bun.lockb
+
+
+
+face_server.py
+requirements.txt
+runtime.txt
+
+
