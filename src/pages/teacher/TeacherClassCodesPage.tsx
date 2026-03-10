@@ -94,6 +94,7 @@ const TeacherClassCodesPage = () => {
         .from("user_biometrics")
         .select("status")
         .eq("user_id", user.id)
+        .eq("active", true)
         .maybeSingle();
       setBiometricStatus(data?.status || null);
     };
