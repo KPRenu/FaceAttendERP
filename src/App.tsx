@@ -12,6 +12,7 @@ import TimetablePage from "./pages/TimetablePage";
 import AttendancePage from "./pages/AttendancePage";
 import IssuesPage from "./pages/IssuesPage";
 import MarkAttendancePage from "./pages/student/MarkAttendancePage";
+import BiometricPage from "./pages/BiometricPage";
 import TeacherClassCodesPage from "./pages/teacher/TeacherClassCodesPage";
 import TeacherStudentsPage from "./pages/teacher/TeacherStudentsPage";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
@@ -54,6 +55,7 @@ const App = () => (
             <Route path="/dashboard/attendance" element={<ProtectedRoute><AttendancePage /></ProtectedRoute>} />
             <Route path="/dashboard/issues" element={<ProtectedRoute><IssuesPage /></ProtectedRoute>} />
             <Route path="/dashboard/mark-attendance" element={<ProtectedRoute><MarkAttendancePage /></ProtectedRoute>} />
+            <Route path="/dashboard/biometric" element={<ProtectedRoute><BiometricPage /></ProtectedRoute>} />
             <Route path="/dashboard/class-codes" element={<ProtectedRoute><TeacherClassCodesPage /></ProtectedRoute>} />
             <Route path="/dashboard/students" element={<ProtectedRoute><TeacherStudentsPage /></ProtectedRoute>} />
             <Route path="/dashboard/users" element={<ProtectedRoute><AdminUsersPage /></ProtectedRoute>} />

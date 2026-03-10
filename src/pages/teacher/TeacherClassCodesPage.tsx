@@ -10,11 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Key, Copy, Clock, Ban, FolderCheck, Loader2, ScanFace, Trash2, RotateCcw } from "lucide-react";
+import { Key, Copy, Clock, Ban, FolderCheck, Loader2, ScanFace, Trash2, RotateCcw, Fingerprint } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatTime, getLocalDate } from "@/lib/utils";
 import { speak, playBeep } from "@/lib/audioUtils";
+import { verifyFaceWithRetry, startKeepAlivePing } from "@/lib/apiUtils";
 import Webcam from "react-webcam";
 
 
@@ -34,6 +35,8 @@ const TeacherClassCodesPage = () => {
   const [finalizing, setFinalizing] = useState<string | null>(null);
   const [form, setForm] = useState({ class_id: "", subject_id: "", duration: "3" });
   const [showVerification, setShowVerification] = useState(false);
+  const [showVerificationChoice, setShowVerificationChoice] = useState(false);
+  const [biometricStatus, setBiometricStatus] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
@@ -52,7 +55,7 @@ const TeacherClassCodesPage = () => {
   }, [user]);
 
   useEffect(() => {
-    const fetch = async () => {
+    const fetchTimetableAndRelated = async () => {
       if (!user) return;
       const { data: ttData } = await supabase.from("timetable")
         .select("*")
@@ -84,7 +87,19 @@ const TeacherClassCodesPage = () => {
 
       await fetchCodes();
     };
-    fetch();
+
+    const fetchBiometricStatus = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("user_biometrics")
+        .select("status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setBiometricStatus(data?.status || null);
+    };
+
+    fetchTimetableAndRelated();
+    fetchBiometricStatus();
   }, [user, fetchCodes]);
 
   const activeTimetableEntries = timetableEntries.filter(e => !e.is_deleted);
@@ -121,7 +136,44 @@ const TeacherClassCodesPage = () => {
       return;
     }
 
-    setShowVerification(true);
+    if (biometricStatus === 'verified') {
+      setShowVerificationChoice(true);
+    } else {
+      setShowVerification(true);
+    }
+  };
+
+  const verifyBiometric = async () => {
+    setVerifying(true);
+    try {
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+
+      const options: CredentialRequestOptions = {
+        publicKey: {
+          challenge,
+          rpId: window.location.hostname,
+          userVerification: "required",
+          timeout: 60000,
+        },
+      };
+
+      const assertion = await navigator.credentials.get(options);
+      if (assertion) {
+        await finalGenerateCode();
+        setShowVerificationChoice(false);
+      }
+    } catch (error: any) {
+      console.error(error);
+      playBeep();
+      toast({ 
+        title: "Biometric Failed", 
+        description: error.name === "NotAllowedError" ? "Verification cancelled." : "Failed to verify fingerprint.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const captureAndVerify = useCallback(async () => {
@@ -137,19 +189,11 @@ const TeacherClassCodesPage = () => {
     }
 
     try {
-      const aiServerUrl = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
-      const response = await fetch(`${aiServerUrl}/verify-face`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id, image: imageSrc })
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.detail || "Verification failed");
-      }
-
-      const result = await response.json();
+      const result = await verifyFaceWithRetry(
+        user.id, 
+        imageSrc, 
+        (status) => toast({ title: "AI Status", description: status })
+      );
 
       if (result.match) {
         toast({ title: "Verified", description: "Identity confirmed. Generating code..." });
@@ -412,7 +456,45 @@ const TeacherClassCodesPage = () => {
             </div>
             <Button onClick={handleGenerateClick}><Key className="w-4 h-4 mr-2" /> Generate Code</Button>
 
-            <Dialog open={showVerification} onOpenChange={setShowVerification}>
+            <Dialog open={showVerificationChoice} onOpenChange={setShowVerificationChoice}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Verify Identity</DialogTitle>
+              <DialogDescription>
+                Choose a verification method to generate the class code.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4 py-8">
+              <Button 
+                variant="outline" 
+                className="flex flex-col h-auto p-8 gap-3 border-2 hover:border-primary hover:bg-primary/5 transition-all"
+                onClick={() => {
+                  setShowVerificationChoice(false);
+                  setShowVerification(true);
+                }}
+              >
+                <ScanFace className="w-12 h-12 text-primary" />
+                <span className="font-bold">Face Recognition</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex flex-col h-auto p-8 gap-3 border-2 hover:border-primary hover:bg-primary/5 transition-all"
+                disabled={verifying}
+                onClick={verifyBiometric}
+              >
+                {verifying ? <Loader2 className="w-12 h-12 animate-spin text-primary" /> : <Fingerprint className="w-12 h-12 text-primary" />}
+                <span className="font-bold">Fingerprint</span>
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowVerificationChoice(false)}>
+                Cancel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showVerification} onOpenChange={setShowVerification}>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle className="text-center font-display">Verify your identity to generate code</DialogTitle>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, Calendar, ClipboardCheck, MessageSquare, Users,
   BookOpen, Settings, LogOut, GraduationCap, Shield, ChevronRight, Menu, X,
-  User,
+  User, Fingerprint,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +31,7 @@ const studentNav: NavItem[] = [
   { label: "Timetable", path: "/dashboard/timetable", icon: <Calendar className="w-5 h-5" /> },
   { label: "Attendance", path: "/dashboard/attendance", icon: <ClipboardCheck className="w-5 h-5" /> },
   { label: "Mark Attendance", path: "/dashboard/mark-attendance", icon: <GraduationCap className="w-5 h-5" /> },
+  { label: "Fingerprint", path: "/dashboard/biometric", icon: <Fingerprint className="w-5 h-5" /> },
   { label: "Issues", path: "/dashboard/issues", icon: <MessageSquare className="w-5 h-5" /> },
 ];
 
@@ -39,6 +40,7 @@ const teacherNav: NavItem[] = [
   { label: "Timetable", path: "/dashboard/timetable", icon: <Calendar className="w-5 h-5" /> },
   { label: "Class Codes", path: "/dashboard/class-codes", icon: <BookOpen className="w-5 h-5" /> },
   { label: "Students", path: "/dashboard/students", icon: <Users className="w-5 h-5" /> },
+  { label: "Fingerprint", path: "/dashboard/biometric", icon: <Fingerprint className="w-5 h-5" /> },
   { label: "Issues", path: "/dashboard/issues", icon: <MessageSquare className="w-5 h-5" /> },
 ];
 
@@ -49,6 +51,7 @@ const adminNav: NavItem[] = [
   { label: "Subjects", path: "/dashboard/subjects", icon: <BookOpen className="w-5 h-5" /> },
   { label: "Timetable", path: "/dashboard/admin-timetable", icon: <Calendar className="w-5 h-5" /> },
   { label: "Attendance", path: "/dashboard/attendance", icon: <ClipboardCheck className="w-5 h-5" /> },
+  { label: "Fingerprint", path: "/dashboard/biometric", icon: <Fingerprint className="w-5 h-5" /> },
   { label: "Issues", path: "/dashboard/issues", icon: <MessageSquare className="w-5 h-5" /> },
 ];
 

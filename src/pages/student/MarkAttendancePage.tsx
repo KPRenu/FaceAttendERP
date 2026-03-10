@@ -6,21 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Camera, ScanFace, CheckCircle, Clock, MapPin, User, Loader2 } from "lucide-react";
+import { Camera, ScanFace, CheckCircle, Clock, MapPin, User, Loader2, Fingerprint } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatTime, getLocalDate } from "@/lib/utils";
 import { speak, playBeep } from "@/lib/audioUtils";
+import { verifyFaceWithRetry, startKeepAlivePing } from "@/lib/apiUtils";
 import Webcam from "react-webcam";
 
 const MarkAttendancePage = () => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [classCode, setClassCode] = useState("");
-  const [step, setStep] = useState<"code" | "camera" | "done">("code");
+  const [step, setStep] = useState<"code" | "verify" | "choice" | "done">("code");
   const [currentClass, setCurrentClass] = useState<any>(null);
   const [activeCode, setActiveCode] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
+  const [biometricStatus, setBiometricStatus] = useState<string | null>(null);
+  const [classDetails, setClassDetails] = useState<any>(null);
   const webcamRef = useRef<Webcam>(null);
 
   useEffect(() => {
@@ -73,6 +76,24 @@ const MarkAttendancePage = () => {
     fetchCurrentClass();
   }, [profile]);
 
+  useEffect(() => {
+    const fetchBiometricStatus = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("user_biometrics")
+        .select("status")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setBiometricStatus(data?.status || null);
+    };
+    fetchBiometricStatus();
+  }, [user]);
+
+  // Keep-alive ping for AI server
+  useEffect(() => {
+    return startKeepAlivePing();
+  }, []);
+
   const handleCodeSubmit = async () => {
     if (!classCode.trim()) {
       toast({ title: "Enter class code", variant: "destructive" });
@@ -103,7 +124,95 @@ const MarkAttendancePage = () => {
     }
 
     setActiveCode(codeData);
-    setStep("camera");
+    setClassDetails({ ...currentClass, ...codeData }); // Consolidate class and code data
+    if (biometricStatus === 'verified') {
+      setStep("choice");
+    } else {
+      setStep("verify"); // Default to face verification if no biometric or not verified
+    }
+  };
+
+  const verifyBiometric = async () => {
+    if (!user || !classDetails) return;
+
+    setVerifying(true);
+    try {
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+
+      const options: CredentialRequestOptions = {
+        publicKey: {
+          challenge,
+          rpId: window.location.hostname,
+          userVerification: "required",
+          timeout: 60000,
+        },
+      };
+
+      const assertion = await navigator.credentials.get(options);
+      if (assertion) {
+        // Biometric verified, mark attendance
+        const date = getLocalDate();
+
+        // 1. Check for existing record for THIS specific slot
+        const { data: existing } = await supabase.from("attendance")
+          .select("status")
+          .eq("student_id", user.id)
+          .eq("timetable_id", classDetails.timetable_id) // Use classDetails.timetable_id
+          .eq("date", date)
+          .eq("slot_start_time", classDetails.slot_start_time)
+          .eq("slot_end_time", classDetails.slot_end_time)
+          .maybeSingle();
+
+        if (existing?.status === 'present') {
+          speak("Attendance already marked");
+          toast({ title: "Already Marked", description: "You are already marked as present for this class." });
+          setStep("done");
+          return;
+        }
+
+        // 2. Upsert attendance with slot identity
+        const { error } = await supabase.from("attendance").upsert({
+          student_id: user.id,
+          timetable_id: classDetails.timetable_id,
+          class_code_id: activeCode?.id || classDetails.id, 
+          status: "present",
+          date: date,
+          slot_start_time: classDetails.slot_start_time,
+          slot_end_time: classDetails.slot_end_time,
+          subject_name: classDetails.subject_name,
+          teacher_name: classDetails.teacher_name,
+          class_name: classDetails.class_name,
+          department: classDetails.department,
+          semester: classDetails.semester,
+          teacher_id: classDetails.teacher_id,
+          marked_at: new Date().toISOString()
+        }, {
+          onConflict: 'student_id,timetable_id,date,slot_start_time,slot_end_time'
+        });
+
+        if (error) {
+          throw error;
+        } else {
+          setStep("done");
+          const msg = existing?.status === 'absent'
+            ? "Attendance updated from absent to present!"
+            : "Attendance marked successfully!";
+          speak("Attendance marked");
+          toast({ title: "Success", description: msg });
+        }
+      }
+    } catch (error: any) {
+      console.error(error);
+      playBeep();
+      toast({
+        title: "Biometric Failed",
+        description: error.name === "NotAllowedError" ? "Verification cancelled." : "Failed to verify fingerprint.",
+        variant: "destructive"
+      });
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const captureAndVerify = useCallback(async () => {
@@ -119,19 +228,11 @@ const MarkAttendancePage = () => {
     }
 
     try {
-      const aiServerUrl = import.meta.env.VITE_AI_SERVER_URL || 'http://localhost:8000';
-      const response = await fetch(`${aiServerUrl}/verify-face`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id, image: imageSrc })
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.detail || "Verification failed");
-      }
-
-      const result = await response.json();
+      const result = await verifyFaceWithRetry(
+        user.id, 
+        imageSrc, 
+        (status) => toast({ title: "AI Status", description: status })
+      );
 
       if (result.match) {
         toast({ title: "Verified", description: "Face match confirmed! Marking attendance..." });
@@ -252,10 +353,50 @@ const MarkAttendancePage = () => {
           </Card>
         )}
 
-        {step === "camera" && (
+        {step === "choice" && (
           <Card className="shadow-card">
             <CardHeader>
-              <CardTitle className="text-lg font-display">Step 2: Face Verification</CardTitle>
+              <CardTitle className="text-lg font-display text-center">Verify Identity</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-4 py-8">
+              <Button 
+                variant="outline" 
+                className="flex items-center justify-start h-auto p-6 gap-4 border-2 hover:border-primary hover:bg-primary/5 transition-all text-left"
+                onClick={() => setStep("verify")}
+              >
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <ScanFace className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <div className="font-bold text-lg">Face Recognition</div>
+                  <div className="text-sm text-muted-foreground">Verify using your registered photo</div>
+                </div>
+              </Button>
+              <Button 
+                variant="outline" 
+                className="flex items-center justify-start h-auto p-6 gap-4 border-2 hover:border-primary hover:bg-primary/5 transition-all text-left"
+                disabled={verifying}
+                onClick={verifyBiometric}
+              >
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  {verifying ? <Loader2 className="w-8 h-8 animate-spin text-primary" /> : <Fingerprint className="w-8 h-8 text-primary" />}
+                </div>
+                <div>
+                  <div className="font-bold text-lg">Fingerprint Sensor</div>
+                  <div className="text-sm text-muted-foreground">Verify using your device biometric</div>
+                </div>
+              </Button>
+              <Button variant="ghost" className="mt-4" onClick={() => setStep("code")}>
+                Back to step 1
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === "verify" && (
+          <Card className="shadow-card">
+            <CardHeader>
+              <CardTitle className="text-lg font-display">Step 2: Identity Verification</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-center">
               <div className="relative w-full aspect-square max-w-[320px] mx-auto rounded-xl overflow-hidden bg-black border-2 border-border">
@@ -288,7 +429,7 @@ const MarkAttendancePage = () => {
               </div>
 
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep("code")} className="flex-1" disabled={verifying}>
+                <Button variant="outline" onClick={() => setStep(biometricStatus === 'verified' ? "choice" : "code")} className="flex-1" disabled={verifying}>
                   Back
                 </Button>
                 <Button onClick={captureAndVerify} className="flex-1" disabled={verifying}>

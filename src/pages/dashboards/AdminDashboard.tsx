@@ -5,7 +5,7 @@ import { Users, BookOpen, Calendar, ClipboardCheck, Shield, AlertCircle, CheckCi
 import { Badge } from "@/components/ui/badge";
 
 const AdminDashboard = () => {
-  const [stats, setStats] = useState({ students: 0, teachers: 0, pendingPhotos: 0, classes: 0 });
+  const [stats, setStats] = useState({ students: 0, teachers: 0, pendingPhotos: 0, pendingBiometrics: 0, classes: 0 });
   const [recentIssues, setRecentIssues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -13,10 +13,11 @@ const AdminDashboard = () => {
     const fetchStats = async () => {
       // Fetch user profile to ensure user is admin, although route protection handles this.
       // Parallel fetching
-      const [studentsRes, teachersRes, pendingRes, classesRes, issuesRes] = await Promise.all([
+      const [studentsRes, teachersRes, pendingRes, biometricRes, classesRes, issuesRes] = await Promise.all([
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "student"),
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "teacher"),
         supabase.from("profiles").select("id", { count: "exact", head: true }).eq("photo_status", "pending").eq("profile_completed", true),
+        supabase.from("user_biometrics").select("id", { count: "exact", head: true }).eq("status", "pending"),
         supabase.from("classes").select("id", { count: "exact", head: true }),
         supabase.from("issues")
           .select("id, subject, description, status, created_at")
@@ -29,6 +30,7 @@ const AdminDashboard = () => {
         students: studentsRes.count || 0,
         teachers: teachersRes.count || 0,
         pendingPhotos: pendingRes.count || 0,
+        pendingBiometrics: biometricRes.count || 0,
         classes: classesRes.count || 0,
       });
       setRecentIssues(issuesRes.data || []);
@@ -79,7 +81,7 @@ const AdminDashboard = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Pending Verifications</p>
-                <p className="text-2xl font-bold text-foreground">{loading ? "..." : stats.pendingPhotos}</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : stats.pendingPhotos + stats.pendingBiometrics}</p>
               </div>
             </div>
           </CardContent>
@@ -102,18 +104,30 @@ const AdminDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="shadow-card">
           <CardHeader>
-            <CardTitle className="text-lg font-display">Pending Photo Verifications</CardTitle>
+            <CardTitle className="text-lg font-display">Pending Photo or Biometric Verifications</CardTitle>
           </CardHeader>
           <CardContent>
-            {loading ? <p className="text-center text-muted-foreground py-8">Loading...</p> : stats.pendingPhotos === 0 ? (
+            {loading ? <p className="text-center text-muted-foreground py-8">Loading...</p> : (stats.pendingPhotos + stats.pendingBiometrics) === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <CheckCircle className="w-10 h-10 mb-2 opacity-50" />
-                <p>All photos verified</p>
+                <CheckCircle className="w-10 h-10 mb-2 opacity-50 text-success" />
+                <p>All photos and biometrics verified</p>
               </div>
             ) : (
-              <p className="text-muted-foreground">
-                {stats.pendingPhotos} user(s) awaiting photo verification. Go to <strong>Users</strong> to manage.
-              </p>
+              <div className="space-y-4">
+                {stats.pendingPhotos > 0 && (
+                  <p className="text-muted-foreground py-2 border-b last:border-0 border-border/50">
+                    <span className="font-bold text-foreground">{stats.pendingPhotos}</span> user(s) awaiting photo verification.
+                  </p>
+                )}
+                {stats.pendingBiometrics > 0 && (
+                  <p className="text-muted-foreground py-2 border-b last:border-0 border-border/50">
+                    <span className="font-bold text-foreground">{stats.pendingBiometrics}</span> user(s) awaiting biometric verification.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground pt-2">
+                  Go to <strong>Users</strong> to manage all verifications.
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>

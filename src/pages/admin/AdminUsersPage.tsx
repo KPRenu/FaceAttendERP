@@ -34,6 +34,7 @@ interface UserProfile {
   profile_completed: boolean;
   email?: string | null;
   role?: string;
+  biometric_status?: string | null;
 }
 
 const AdminUsersPage = () => {
@@ -53,6 +54,8 @@ const AdminUsersPage = () => {
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [userToMessage, setUserToMessage] = useState<UserProfile | null>(null);
   const [adminMessage, setAdminMessage] = useState("");
+  const [biometricRejectDialogOpen, setBiometricRejectDialogOpen] = useState(false);
+  const [userForBiometricReject, setUserForBiometricReject] = useState<UserProfile | null>(null);
 
   // Bulk Selection and Actions State
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -80,8 +83,16 @@ const AdminUsersPage = () => {
       const { data: roles } = await supabase.from("user_roles").select("user_id, role").in("user_id", userIds);
       const roleMap = new Map(roles?.map((r) => [r.user_id, r.role]) || []);
 
+      // Fetch biometrics for all users
+      const { data: biometrics } = await supabase.from("user_biometrics").select("user_id, status");
+      const biometricMap = new Map(biometrics?.map((b) => [b.user_id, b.status]) || []);
+
       const { data: { user } } = await supabase.auth.getUser();
-      const allUsers = profiles.map((p) => ({ ...p, role: roleMap.get(p.user_id) || "unknown" })) as UserProfile[];
+      const allUsers = profiles.map((p) => ({ 
+        ...p, 
+        role: roleMap.get(p.user_id) || "unknown",
+        biometric_status: biometricMap.get(p.user_id) || null
+      })) as UserProfile[];
 
       // Filter out current admin
       setUsers(allUsers.filter(u => u.user_id !== user?.id));
@@ -163,6 +174,40 @@ const AdminUsersPage = () => {
       toast({ title: "Verification Error", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateBiometricStatus = async (userId: string, status: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("user_biometrics")
+        .update({ status: status })
+        .eq("user_id", userId);
+
+      if (error) {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+      } else {
+        toast({ title: "Updated", description: `Biometric ${status} successfully.` });
+        fetchUsers();
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openBiometricRejectDialog = (user: UserProfile) => {
+    setUserForBiometricReject(user);
+    setBiometricRejectDialogOpen(true);
+  };
+
+  const confirmBiometricReject = () => {
+    if (userForBiometricReject) {
+      updateBiometricStatus(userForBiometricReject.user_id, "rejected");
+      setBiometricRejectDialogOpen(false);
+      setUserForBiometricReject(null);
     }
   };
 
@@ -553,6 +598,7 @@ const AdminUsersPage = () => {
                       <TableHead>Department</TableHead>
                       <TableHead>ID</TableHead>
                       <TableHead>Photo Status</TableHead>
+                      <TableHead>Biometric</TableHead>
                       <TableHead>Actions</TableHead>
                       <TableHead>Message</TableHead>
                       <TableHead>Delete</TableHead>
@@ -597,34 +643,85 @@ const AdminUsersPage = () => {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {u.photo_status === "pending" && (
-                            <div className="flex gap-2">
-                              <Button size="sm" onClick={() => openVerificationDialog(u)} className="bg-success hover:bg-success/90 text-success-foreground">
-                                Verify
-                              </Button>
-                              <Button size="sm" variant="destructive" onClick={() => openVerificationDialog(u)}>
-                                Reject
-                              </Button>
-                            </div>
+                          {u.biometric_status ? (
+                            <Badge
+                              variant="outline"
+                              className={
+                                u.biometric_status === "verified" ? "border-success text-success"
+                                  : u.biometric_status === "rejected" ? "border-destructive text-destructive"
+                                    : "border-warning text-warning"
+                              }
+                            >
+                              {u.biometric_status === "verified" && <CheckCircle className="w-3 h-3 mr-1" />}
+                              {u.biometric_status === "rejected" && <XCircle className="w-3 h-3 mr-1" />}
+                              {u.biometric_status === "pending" && <Clock className="w-3 h-3 mr-1" />}
+                              {u.biometric_status}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">Not registered</span>
                           )}
-                          {u.photo_status === "verified" && (
-                            <Button size="sm" variant="destructive" onClick={() => openVerificationDialog(u)}>
-                              Reject
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-2">
+                            {/* Photo Actions */}
+                            <div className="flex gap-1">
+                              {u.photo_status === "pending" && (
+                                <>
+                                  <Button size="sm" onClick={() => openVerificationDialog(u)} className="h-7 px-2 bg-success hover:bg-success/90 text-success-foreground text-[10px]">
+                                    Verify Photo
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => openVerificationDialog(u)} className="h-7 px-2 text-[10px]">
+                                    Reject Photo
+                                  </Button>
+                                </>
+                              )}
+                              {u.photo_status === "verified" && (
+                                <Button size="sm" variant="destructive" onClick={() => openVerificationDialog(u)} className="h-7 px-2 text-[10px]">
+                                  Reject Photo
+                                </Button>
+                              )}
+                              {u.photo_status === "rejected" && (
+                                <>
+                                  <Button size="sm" onClick={() => openVerificationDialog(u)} className="h-7 px-2 bg-success hover:bg-success/90 text-success-foreground text-[10px]">
+                                    Verify Photo
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => updatePhotoStatus(u.user_id, "pending")} className="h-7 px-2 text-[10px]">
+                                    Reset Photo
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Biometric Actions */}
+                            {u.biometric_status && (
+                              <div className="flex gap-1">
+                                {u.biometric_status === "pending" && (
+                                  <>
+                                    <Button size="sm" onClick={() => updateBiometricStatus(u.user_id, "verified")} className="h-7 px-2 bg-primary/10 text-primary hover:bg-primary/20 text-[10px]">
+                                      Verify Bio
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={() => openBiometricRejectDialog(u)} className="h-7 px-2 text-destructive border-destructive/20 text-[10px]">
+                                      Reject Bio
+                                    </Button>
+                                  </>
+                                )}
+                                {u.biometric_status === "verified" && (
+                                  <Button size="sm" variant="outline" onClick={() => openBiometricRejectDialog(u)} className="h-7 px-2 text-destructive border-destructive/20 text-[10px]">
+                                    Reject Bio
+                                  </Button>
+                                )}
+                                {u.biometric_status === "rejected" && (
+                                  <Button size="sm" variant="outline" onClick={() => updateBiometricStatus(u.user_id, "verified")} className="h-7 px-2 bg-primary/10 text-primary hover:bg-primary/20 text-[10px]">
+                                    Verify Bio
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+
+                            <Button size="sm" variant="outline" onClick={() => navigate(`/dashboard/profile/${u.user_id}`)} className="h-7 px-2 text-[10px]">
+                              Edit Profile
                             </Button>
-                          )}
-                          {u.photo_status === "rejected" && (
-                            <div className="flex gap-2">
-                              <Button size="sm" onClick={() => openVerificationDialog(u)} className="bg-success hover:bg-success/90 text-success-foreground">
-                                Verify
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => updatePhotoStatus(u.user_id, "pending")}>
-                                Reset
-                              </Button>
-                            </div>
-                          )}
-                          <Button size="sm" variant="outline" onClick={() => navigate(`/dashboard/profile/${u.user_id}`)}>
-                            Edit
-                          </Button>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Button size="sm" variant="outline" onClick={() => { setUserToMessage(u); setMessageDialogOpen(true); }}>
@@ -942,6 +1039,31 @@ const AdminUsersPage = () => {
               <Button variant="outline" onClick={() => setBulkDeleteDialogOpen(false)}>Cancel</Button>
               <Button variant="destructive" onClick={handleBulkDelete} disabled={loading}>
                 {loading ? "Deleting..." : `Delete ${selectedIds.size} Accounts`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Biometric Rejection Confirmation Dialog */}
+        <Dialog open={biometricRejectDialogOpen} onOpenChange={setBiometricRejectDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <XCircle className="w-5 h-5" />
+                Reject Biometric Registration
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to reject the biometric registration for <strong>{userForBiometricReject?.full_name}</strong>?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="bg-destructive/5 p-4 rounded-lg border border-destructive/10 my-4">
+              <p className="text-sm font-medium text-destructive">This will prevent the user from using this fingerprint for attendance.</p>
+              <p className="text-xs text-destructive/80 mt-1">They will need to delete and re-register if they want to try again.</p>
+            </div>
+            <DialogFooter className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setBiometricRejectDialogOpen(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={confirmBiometricReject} disabled={loading}>
+                {loading ? "Processing..." : "Confirm Rejection"}
               </Button>
             </DialogFooter>
           </DialogContent>
