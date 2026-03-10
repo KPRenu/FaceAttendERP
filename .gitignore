@@ -44,7 +44,6 @@ bun.lockb
 
 
 face_server.py
-requirements.txt
 runtime.txt
 
 

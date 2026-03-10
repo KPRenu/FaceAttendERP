@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+deepface==0.0.93
+tensorflow==2.12.0
+opencv-python-headless
+supabase
+python-dotenv
+numpy==1.23.5
+pillow
+requests
