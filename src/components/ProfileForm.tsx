@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +25,9 @@ interface ProfileFormProps {
 }
 
 const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false }: ProfileFormProps) => {
-  const { user: authUser } = useAuth();
+  const { user: authUser, signOut } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(initialData?.avatar_url || null);
@@ -51,6 +53,7 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
   const [showReverifyDialog, setShowReverifyDialog] = useState(false);
   const [showAdminReverifyDialog, setShowAdminReverifyDialog] = useState(false);
   const [showRoleTransitionDialog, setShowRoleTransitionDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [transitionData, setTransitionData] = useState({
     department: "",
     semester: "",
@@ -345,6 +348,23 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
     setLoading(false);
   };
 
+  const handleDeleteAccount = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.rpc('delete_user_account');
+      if (error) throw error;
+
+      await signOut();
+      toast({ title: "Account Deleted", description: "Your account has been permanently removed." });
+      navigate("/");
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+      setShowDeleteDialog(false);
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex flex-col items-center gap-3">
@@ -633,6 +653,59 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
               setShowAdminReverifyDialog(false);
               saveProfile(true);
             }}>Save & Re-verify</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Danger Zone: Account Deletion */}
+      {!isAdminView && (
+        <div className="pt-8 mt-8 border-t border-destructive/20">
+          <h3 className="text-sm font-medium text-destructive mb-3 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" /> Danger Zone
+          </h3>
+          <div className="bg-destructive/5 border border-destructive/10 p-4 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-destructive">Delete Account Permanently</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Once you delete your account, there is no going back. All your attendance data and profile information will be removed.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setShowDeleteDialog(true)}
+              className="w-full sm:w-auto"
+            >
+              Delete Account
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Permanent Account Deletion
+            </DialogTitle>
+            <div className="pt-4 text-sm text-foreground space-y-4">
+              <p>Are you absolutely sure you want to delete your account?</p>
+              <div className="bg-destructive/10 p-3 rounded-lg text-xs text-destructive font-medium space-y-2">
+                <p>• This action is permanent and cannot be undone.</p>
+                <p>• All your personal data and attendance records will be removed.</p>
+                <p>• Your email address will be deleted from our system, freeing it for new registrations.</p>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 justify-end mt-6">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={loading}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteAccount} disabled={loading}>
+              {loading ? "Deleting..." : "Confirm Delete"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
