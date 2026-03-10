@@ -49,9 +49,19 @@ Attendance is verified using:
 
 ---
 
+### 🔑 Biometric (Fingerprint) Authentication
+A secure alternative to face recognition:
+- **WebAuthn / Passkeys** technology.
+- Device-level biometric security (fingerprint/Windows Hello).
+- Privacy-focused: Biometric data stays on the user's device.
+- Requires Admin manual verification for activation.
+
+---
+
 ### 🧾 Attendance Integrity
 Each attendance record stores:
-- Student snapshot
+- Student snapshot (if using Face)
+- Biometric verification status
 - Teacher snapshot
 - Timestamp
 - Class metadata
@@ -101,6 +111,7 @@ graph TD
 - **TypeScript**
 - **TailwindCSS**
 - **Lucide Icons**
+- **WebAuthn API** (Biometrics)
 
 ### Backend (AI)
 - **Python** & **FastAPI**
@@ -231,8 +242,9 @@ Your API will be available at: `https://<username>-face-attend-api.hf.space`
 
 ---
 
-# 🔍 Face Recognition Workflow
+# 🔍 Verification Workflows
 
+### Face Recognition Workflow
 ```mermaid
 sequenceDiagram
     participant U as User
@@ -249,6 +261,24 @@ sequenceDiagram
     A->>D: Fetch Reference Embedding
     A->>A: Cosine Similarity Comparison
     A-->>F: Match Result
+    F->>D: Mark Attendance
+```
+
+### Biometric (Fingerprint) Workflow
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant D as Database
+
+    U->>F: Register Biometric (FIDO2)
+    F->>U: Device Biometric Prompt
+    U-->>F: Public Key Generated
+    F->>D: Store Public Key (Pending)
+    Note over U,D: Admin Verifies in Dashboard
+    U->>F: Login/Mark Attendance
+    F->>U: Device Biometric Hardware
+    U-->>F: Authentication Signature
     F->>D: Mark Attendance
 ```
 
@@ -273,7 +303,7 @@ sequenceDiagram
 - [ ] Liveness detection to prevent spoofing
 - [ ] Attendance analytics dashboard
 - [ ] HRMS integration
-- [ ] Biometric multi-factor authentication
+- [x] Biometric multi-factor authentication
 
 ---
 
