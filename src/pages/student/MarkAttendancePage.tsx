@@ -132,19 +132,39 @@ const MarkAttendancePage = () => {
     }
   };
 
-  const verifyBiometric = async () => {
+  const handleVerifyBiometric = async () => {
     if (!user || !classDetails) return;
 
     setVerifying(true);
     try {
+      // 1. Fetch the LATEST verified credential ID from database
+      const { data: bioData, error: bioError } = await supabase
+        .from("user_biometrics")
+        .select("credential_id")
+        .eq("user_id", user.id)
+        .eq("status", "verified")
+        .single();
+
+      if (bioError || !bioData) {
+        throw new Error("No verified biometric found. Please register or wait for admin approval.");
+      }
+
+      // 2. Prepare verification with specific allowed credential
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
+
+      // Convert base64 credential ID back to Uint8Array
+      const rawId = Uint8Array.from(atob(bioData.credential_id), c => c.charCodeAt(0));
 
       const options: CredentialRequestOptions = {
         publicKey: {
           challenge,
           rpId: window.location.hostname,
           userVerification: "required",
+          allowCredentials: [{
+            id: rawId,
+            type: "public-key"
+          }],
           timeout: 60000,
         },
       };
@@ -376,7 +396,7 @@ const MarkAttendancePage = () => {
                 variant="outline" 
                 className="flex items-center justify-start h-auto p-6 gap-4 border-2 hover:border-primary hover:bg-primary/5 transition-all text-left"
                 disabled={verifying}
-                onClick={verifyBiometric}
+                onClick={handleVerifyBiometric}
               >
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                   {verifying ? <Loader2 className="w-8 h-8 animate-spin text-primary" /> : <Fingerprint className="w-8 h-8 text-primary" />}

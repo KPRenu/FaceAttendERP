@@ -143,17 +143,39 @@ const TeacherClassCodesPage = () => {
     }
   };
 
-  const verifyBiometric = async () => {
+  const handleVerifyBiometric = async () => {
+    if (!user) return;
     setVerifying(true);
+
     try {
+      // 1. Fetch the LATEST verified credential ID from database
+      const { data: bioData, error: bioError } = await supabase
+        .from("user_biometrics")
+        .select("credential_id")
+        .eq("user_id", user.id)
+        .eq("status", "verified")
+        .single();
+
+      if (bioError || !bioData) {
+        throw new Error("No verified biometric found. Please register or wait for admin approval.");
+      }
+
+      // 2. Prepare verification with specific allowed credential
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
+
+      // Convert base64 credential ID back to Uint8Array
+      const rawId = Uint8Array.from(atob(bioData.credential_id), c => c.charCodeAt(0));
 
       const options: CredentialRequestOptions = {
         publicKey: {
           challenge,
           rpId: window.location.hostname,
           userVerification: "required",
+          allowCredentials: [{
+            id: rawId,
+            type: "public-key"
+          }],
           timeout: 60000,
         },
       };
@@ -168,7 +190,7 @@ const TeacherClassCodesPage = () => {
       playBeep();
       toast({ 
         title: "Biometric Failed", 
-        description: error.name === "NotAllowedError" ? "Verification cancelled." : "Failed to verify fingerprint.", 
+        description: error.message || "Failed to verify fingerprint.", 
         variant: "destructive" 
       });
     } finally {
@@ -480,7 +502,7 @@ const TeacherClassCodesPage = () => {
                 variant="outline" 
                 className="flex flex-col h-auto p-8 gap-3 border-2 hover:border-primary hover:bg-primary/5 transition-all"
                 disabled={verifying}
-                onClick={verifyBiometric}
+                onClick={handleVerifyBiometric}
               >
                 {verifying ? <Loader2 className="w-12 h-12 animate-spin text-primary" /> : <Fingerprint className="w-12 h-12 text-primary" />}
                 <span className="font-bold">Fingerprint</span>
