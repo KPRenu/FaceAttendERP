@@ -143,6 +143,7 @@ const MarkAttendancePage = () => {
         .select("credential_id")
         .eq("user_id", user.id)
         .eq("status", "verified")
+        .eq("active", true)
         .single();
 
       if (bioError || !bioData) {

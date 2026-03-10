@@ -13,6 +13,9 @@ interface BiometricData {
   id: string;
   status: string;
   created_at: string;
+  device_name: string | null;
+  device_type: string | null;
+  active: boolean;
 }
 
 const BiometricPage = () => {
@@ -29,8 +32,9 @@ const BiometricPage = () => {
     try {
       const { data, error } = await supabase
         .from("user_biometrics")
-        .select("id, status, created_at")
+        .select("id, status, created_at, device_name, device_type, active")
         .eq("user_id", user.id)
+        .eq("active", true)
         .maybeSingle();
 
       if (error) throw error;
@@ -45,6 +49,21 @@ const BiometricPage = () => {
   useEffect(() => {
     fetchBiometric();
   }, [user]);
+
+  const getDeviceMetadata = () => {
+    const ua = navigator.userAgent;
+    let type = "Unknown";
+    if (/android/i.test(ua)) type = "Android";
+    else if (/iPad|iPhone|iPod/.test(ua)) type = "iOS";
+    else if (/windows/i.test(ua)) type = "Windows";
+    else if (/mac/i.test(ua)) type = "Mac";
+    else if (/linux/i.test(ua)) type = "Linux";
+
+    return {
+      name: navigator.platform || "Browser",
+      type: type
+    };
+  };
 
   const handleRegister = async () => {
     if (!user) return;
@@ -82,20 +101,35 @@ const BiometricPage = () => {
       
       if (!credential) throw new Error("Failed to create biometric credential");
 
-      // 3. Extract public key and ID (In a real app, this should be verified on server)
-      // For this implementation, we store the ID and a dummy public key as it's locally handled
+      // 3. Prepare data
       const credentialId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
-      
+      const metadata = getDeviceMetadata();
+
+      // 4. Deactivate ALL previous biometrics before inserting new one
+      const { error: updateError } = await supabase
+        .from("user_biometrics")
+        .update({ active: false })
+        .eq("user_id", user.id);
+
+      if (updateError) throw updateError;
+
+      // 5. Insert new record
       const { error } = await supabase.from("user_biometrics").insert({
         user_id: user.id,
         credential_id: credentialId,
-        public_key: "webauthn_public_key_stored_locally", // In production, store the actual parsed public key
-        status: "pending"
+        public_key: "webauthn_public_key_stored_locally",
+        status: "pending",
+        device_name: metadata.name,
+        device_type: metadata.type,
+        active: true
       });
 
       if (error) throw error;
 
-      toast({ title: "Registered Successfully", description: "Your fingerprint is now pending admin verification." });
+      toast({ 
+        title: "Registered Successfully", 
+        description: `Your ${metadata.type} biometric is now pending admin verification. Any previous devices have been deactivated.` 
+      });
       fetchBiometric();
     } catch (error: any) {
       console.error(error);
@@ -115,14 +149,16 @@ const BiometricPage = () => {
     setDeleteConfirmOpen(false);
 
     try {
+      // We perform an update to set active=false instead of hard delete
+      // This maintains the audit trail as requested
       const { error } = await supabase
         .from("user_biometrics")
-        .delete()
+        .update({ active: false })
         .eq("id", biometric.id);
 
       if (error) throw error;
 
-      toast({ title: "Biometric Deleted", description: "Your fingerprint has been removed." });
+      toast({ title: "Biometric Deactivated", description: "Your fingerprint login has been disabled." });
       setBiometric(null);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -181,7 +217,10 @@ const BiometricPage = () => {
                           {biometric.status.charAt(0).toUpperCase() + biometric.status.slice(1)}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-sm font-medium text-primary mt-0.5">
+                        Device: {biometric.device_name || "Unknown"} ({biometric.device_type || "Unknown"})
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
                         Registered on {new Date(biometric.created_at).toLocaleDateString()}
                       </p>
                     </div>

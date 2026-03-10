@@ -83,8 +83,11 @@ const AdminUsersPage = () => {
       const { data: roles } = await supabase.from("user_roles").select("user_id, role").in("user_id", userIds);
       const roleMap = new Map(roles?.map((r) => [r.user_id, r.role]) || []);
 
-      // Fetch biometrics for all users
-      const { data: biometrics } = await supabase.from("user_biometrics").select("user_id, status");
+      // Fetch active biometrics for all users
+      const { data: biometrics } = await supabase
+        .from("user_biometrics")
+        .select("user_id, status")
+        .eq("active", true);
       const biometricMap = new Map(biometrics?.map((b) => [b.user_id, b.status]) || []);
 
       const { data: { user } } = await supabase.auth.getUser();
@@ -180,17 +183,41 @@ const AdminUsersPage = () => {
   const updateBiometricStatus = async (userId: string, status: string) => {
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from("user_biometrics")
-        .update({ status: status })
-        .eq("user_id", userId);
+      if (status === "verified") {
+        // 1. Deactivate ALL for this user
+        await supabase
+          .from("user_biometrics")
+          .update({ active: false })
+          .eq("user_id", userId);
 
-      if (error) {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+        // 2. Verify and Activate the latest one
+        const { data: latest } = await supabase
+          .from("user_biometrics")
+          .select("id")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latest) {
+          const { error } = await supabase
+            .from("user_biometrics")
+            .update({ status: status, active: true })
+            .eq("id", latest.id);
+          if (error) throw error;
+        }
       } else {
-        toast({ title: "Updated", description: `Biometric ${status} successfully.` });
-        fetchUsers();
+        // Just update the current active one
+        const { error } = await supabase
+          .from("user_biometrics")
+          .update({ status: status })
+          .eq("user_id", userId)
+          .eq("active", true);
+        if (error) throw error;
       }
+
+      toast({ title: "Updated", description: `Biometric ${status} successfully.` });
+      fetchUsers();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
