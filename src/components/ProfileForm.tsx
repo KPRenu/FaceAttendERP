@@ -20,7 +20,7 @@ interface ProfileFormProps {
   initialData?: any;
   role: string;
   userId: string;
-  onSuccess?: () => void;
+  onSuccess?: (data?: any) => void;
   isAdminView?: boolean;
 }
 
@@ -152,12 +152,14 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
     }
   };
 
-  const saveProfile = async (forceReverify: boolean, emailWasChanged: boolean = false) => {
+  const saveProfile = async (forceReverify: boolean, emailWasChanged: boolean = false, overrideData?: any) => {
     setLoading(true);
     setShowReverifyDialog(false);
 
+    const activeForm = overrideData ? { ...form, ...overrideData } : form;
+
     // Handle Email Update with robust validation
-    const cleanEmail = form.email.trim().toLowerCase().replace(/\s/g, '');
+    const cleanEmail = activeForm.email.trim().toLowerCase().replace(/\s/g, '');
     const currentEmail = (authUser?.email || "").trim().toLowerCase();
 
     // Basic regex validation
@@ -212,36 +214,36 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
     }
 
     const profileData: any = {
-      full_name: form.full_name,
-      phone: form.phone,
-      college: form.college,
-      address: form.address,
+      full_name: activeForm.full_name,
+      phone: activeForm.phone,
+      college: activeForm.college,
+      address: activeForm.address,
       avatar_url: avatarUrl,
       // We only update the profile email if it hasn't changed, 
       // or if we want the local DB to reflect the *target* email (which can be confusing if login fails).
       // Keeping it as form.email for now as requested, but adding a note in the toast.
-      email: form.email.trim().toLowerCase().replace(/\s/g, ''),
+      email: activeForm.email.trim().toLowerCase().replace(/\s/g, ''),
       profile_completed: true,
     };
 
-    // Role specific logic - Use the NEW role (form.role)
-    const targetRole = form.role || role;
+    // Role specific logic - Use the NEW role (activeForm.role)
+    const targetRole = activeForm.role || role;
 
     if (targetRole === "student") {
-      profileData.department = form.department;
-      profileData.usn = form.usn;
-      profileData.semester = form.semester ? parseInt(form.semester) : null;
-      profileData.section = form.section;
+      profileData.department = activeForm.department;
+      profileData.usn = activeForm.usn;
+      profileData.semester = activeForm.semester ? parseInt(activeForm.semester) : null;
+      profileData.section = activeForm.section;
       profileData.teacher_id = null;
     } else if (targetRole === "teacher") {
-      profileData.department = form.department;
-      profileData.teacher_id = form.teacher_id;
+      profileData.department = activeForm.department;
+      profileData.teacher_id = activeForm.teacher_id;
       profileData.usn = null;
       profileData.semester = null;
       profileData.section = null;
     } else if (targetRole === "admin") {
       // Admin department is optional
-      profileData.department = (form.department && form.department !== "—") ? form.department : null;
+      profileData.department = (activeForm.department && activeForm.department !== "—") ? activeForm.department : null;
       profileData.usn = null;
       profileData.semester = null;
       profileData.section = null;
@@ -249,12 +251,13 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
     }
 
     // photo_status logic
-    const emailChangedForReverify = !isAdminView && form.email !== (authUser?.email || "");
+    const emailChangedForReverify = !isAdminView && activeForm.email !== (authUser?.email || "");
     if (isAdminView) {
       profileData.photo_status = "verified";
     } else if (forceReverify || emailChangedForReverify) {
       profileData.photo_status = "pending";
     } else if (avatarFile) {
+      // ...
       // Admin editing themselves
       if (role === 'admin') {
         const { count, error: countErr } = await supabase
@@ -282,11 +285,11 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
     }
 
     // Handle Role Update (Admin only)
-    if (isAdminView && form.role && form.role !== role) {
+    if (isAdminView && activeForm.role && activeForm.role !== role) {
       const { error: roleErr } = await supabase
         .from("user_roles")
         .upsert(
-          { user_id: userId, role: form.role as any },
+          { user_id: userId, role: activeForm.role as any },
           { onConflict: 'user_id' }
         );
 
@@ -343,7 +346,7 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
         toast({ title: "Success", description: msg });
       }
 
-      if (onSuccess) onSuccess();
+      if (onSuccess) onSuccess(overrideData ? { ...form, ...overrideData } : form);
     }
     setLoading(false);
   };
@@ -612,7 +615,11 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
                 section: transitionData.section
               }));
               setShowRoleTransitionDialog(false);
-              saveProfile(false);
+              saveProfile(false, false, {
+                department: transitionData.department,
+                semester: transitionData.semester,
+                section: transitionData.section
+              });
             }}>Confirm & Save</Button>
           </DialogFooter>
         </DialogContent>
