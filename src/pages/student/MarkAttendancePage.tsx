@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Camera, ScanFace, CheckCircle, Clock, MapPin, User, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatTime, getLocalDate } from "@/lib/utils";
+import { speak, playBeep } from "@/lib/audioUtils";
 import Webcam from "react-webcam";
 
 const MarkAttendancePage = () => {
@@ -148,6 +149,7 @@ const MarkAttendancePage = () => {
           .maybeSingle();
 
         if (existing?.status === 'present') {
+          speak("Attendance already marked");
           toast({ title: "Already Marked", description: "You are already marked as present for this class." });
           setStep("done");
           return;
@@ -180,9 +182,11 @@ const MarkAttendancePage = () => {
           const msg = existing?.status === 'absent'
             ? "Attendance updated from absent to present!"
             : "Attendance marked successfully!";
+          speak("Attendance marked");
           toast({ title: "Success", description: msg });
         }
       } else {
+        playBeep();
         toast({
           title: "Verification Failed",
           description: `Face does not match. (Confidence: ${(result.confidence * 100).toFixed(1)}%)`,
@@ -190,6 +194,7 @@ const MarkAttendancePage = () => {
         });
       }
     } catch (err: any) {
+      playBeep();
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setVerifying(false);

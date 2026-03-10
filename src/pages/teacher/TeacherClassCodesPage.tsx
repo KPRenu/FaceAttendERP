@@ -14,6 +14,7 @@ import { Key, Copy, Clock, Ban, FolderCheck, Loader2, ScanFace, Trash2, RotateCc
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatTime, getLocalDate } from "@/lib/utils";
+import { speak, playBeep } from "@/lib/audioUtils";
 import Webcam from "react-webcam";
 
 
@@ -155,6 +156,7 @@ const TeacherClassCodesPage = () => {
         await finalGenerateCode();
         setShowVerification(false);
       } else {
+        playBeep();
         toast({
           title: "Verification Failed",
           description: `Face does not match. (Confidence: ${(result.confidence * 100).toFixed(1)}%)`,
@@ -162,6 +164,7 @@ const TeacherClassCodesPage = () => {
         });
       }
     } catch (err: any) {
+      playBeep();
       toast({ title: "Verification Error", description: err.message, variant: "destructive" });
     } finally {
       setVerifying(false);
@@ -194,6 +197,7 @@ const TeacherClassCodesPage = () => {
     });
 
     if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    speak("Code generated");
     toast({ title: "Code generated!", description: `Code: ${code}` });
     await fetchCodes();
   };
