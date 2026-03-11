@@ -295,7 +295,7 @@ const TeacherClassCodesPage = () => {
         class_code_id: newCode.id,
         latitude: locationData.latitude,
         longitude: locationData.longitude,
-        radius: 30, // Default 30 meters
+        radius: 300, // Increased to 300 meters for better flexibility
         accuracy_threshold: 100
       });
 
