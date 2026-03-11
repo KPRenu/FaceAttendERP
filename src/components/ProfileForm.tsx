@@ -419,11 +419,15 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
             placeholder="Enter email address" 
             value={form.email} 
             onChange={(e) => updateField("email", e.target.value)} 
-            disabled={!isAdminView} 
+            disabled={true} 
           />
-          {!isAdminView && (
+          {!isAdminView ? (
             <p className="text-[10px] text-muted-foreground mt-1">
               Use the "Manage Email" section below to update your login email.
+            </p>
+          ) : (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              User login email cannot be changed by admin here.
             </p>
           )}
         </div>
