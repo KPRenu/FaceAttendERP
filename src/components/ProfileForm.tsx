@@ -50,6 +50,8 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showReverifyDialog, setShowReverifyDialog] = useState(false);
   const [showAdminReverifyDialog, setShowAdminReverifyDialog] = useState(false);
   const [showRoleTransitionDialog, setShowRoleTransitionDialog] = useState(false);
@@ -158,32 +160,7 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
 
     const activeForm = overrideData ? { ...form, ...overrideData } : form;
 
-    // Handle Email Update with robust validation
-    const cleanEmail = activeForm.email.trim().toLowerCase().replace(/\s/g, '');
-    const currentEmail = (authUser?.email || "").trim().toLowerCase();
-
-    // Basic regex validation
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-
-    if (!isAdminView && cleanEmail !== currentEmail) {
-      if (!emailRegex.test(cleanEmail)) {
-        toast({ title: "Invalid Email", description: "Please enter a valid email address.", variant: "destructive" });
-        setLoading(false);
-        return;
-      }
-
-      const { error: emailError } = await supabase.auth.updateUser({ email: cleanEmail });
-      if (emailError) {
-        toast({
-          title: "Email Update Failed",
-          description: `Database rejected "${cleanEmail}". Error: ${emailError.message}`,
-          variant: "destructive"
-        });
-        setLoading(false);
-        return;
-      }
-      toast({ title: "Confirmation Sent", description: "Verification link sent to your new email. Please confirm it to complete the change." });
-    }
+    // Email update is now handled in a dedicated flow
 
     // Handle Password Update
     if (newPassword) {
@@ -339,14 +316,49 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
           ? "Profile updated. Your account needs admin re-verification due to major changes."
           : "Profile updated successfully.";
 
-        if (emailWasChanged) {
-          msg += " IMPORTANT: You must click the link in your NEW email before you can login with it.";
-        }
-
         toast({ title: "Success", description: msg });
       }
 
       if (onSuccess) onSuccess(overrideData ? { ...form, ...overrideData } : form);
+    }
+    setLoading(false);
+  };
+
+  const handleEmailChange = async () => {
+    if (!newEmail) {
+      toast({ title: "Error", description: "Please enter a new email address.", variant: "destructive" });
+      return;
+    }
+
+    const cleanEmail = newEmail.trim().toLowerCase().replace(/\s/g, '');
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+    if (!emailRegex.test(cleanEmail)) {
+      toast({ title: "Invalid Email", description: "Please enter a valid email address.", variant: "destructive" });
+      return;
+    }
+
+    if (cleanEmail === authUser?.email?.toLowerCase()) {
+      toast({ title: "No change", description: "This is already your current email address.", variant: "destructive" });
+      return;
+    }
+
+    setLoading(true);
+    const { error: emailError } = await supabase.auth.updateUser({ email: cleanEmail });
+    
+    if (emailError) {
+      toast({
+        title: "Email Change Failed",
+        description: emailError.message,
+        variant: "destructive"
+      });
+    } else {
+      toast({ 
+        title: "Verification Sent", 
+        description: "A verification link has been sent to your new email. Please confirm it within 30 minutes to complete the change." 
+      });
+      setShowEmailDialog(false);
+      setNewEmail("");
     }
     setLoading(false);
   };
@@ -399,11 +411,19 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email Address</Label>
-          <Input id="email" name="email" type="email" autoComplete="email" placeholder="Enter email address" value={form.email} onChange={(e) => updateField("email", e.target.value)} disabled={isAdminView} />
-          {pendingEmail && !isAdminView && (
-            <p className="text-xs font-medium text-amber-600 bg-amber-50 p-2 rounded border border-amber-100 mt-1">
-              Change pending confirmation for: <strong>{pendingEmail}</strong>.
-              Check your inbox to complete the switch.
+          <Input 
+            id="email" 
+            name="email" 
+            type="email" 
+            autoComplete="email" 
+            placeholder="Enter email address" 
+            value={form.email} 
+            onChange={(e) => updateField("email", e.target.value)} 
+            disabled={!isAdminView} 
+          />
+          {!isAdminView && (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Use the "Manage Email" section below to update your login email.
             </p>
           )}
         </div>
@@ -434,7 +454,19 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
         <>
           <div className="space-y-2">
             <Label htmlFor="usn">USN *</Label>
-            <Input id="usn" name="usn" autoComplete="off" placeholder="University Seat Number" value={form.usn} onChange={(e) => updateField("usn", e.target.value)} required />
+            <Input 
+              id="usn" 
+              name="usn" 
+              autoComplete="off" 
+              placeholder="University Seat Number" 
+              value={form.usn} 
+              onChange={(e) => updateField("usn", e.target.value)} 
+              required 
+              disabled={!!initialData?.usn && !isAdminView}
+            />
+            {!!initialData?.usn && !isAdminView && (
+              <p className="text-[10px] text-muted-foreground mt-1">Contact admin to update your USN.</p>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
@@ -467,7 +499,19 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="teacher_id">Teacher ID *</Label>
-            <Input id="teacher_id" name="teacher_id" autoComplete="off" placeholder="TID" value={form.teacher_id} onChange={(e) => updateField("teacher_id", e.target.value)} required />
+            <Input 
+              id="teacher_id" 
+              name="teacher_id" 
+              autoComplete="off" 
+              placeholder="TID" 
+              value={form.teacher_id} 
+              onChange={(e) => updateField("teacher_id", e.target.value)} 
+              required 
+              disabled={!!initialData?.teacher_id && !isAdminView}
+            />
+            {!!initialData?.teacher_id && !isAdminView && (
+              <p className="text-[10px] text-muted-foreground mt-1">Contact admin to update your Teacher ID.</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Department *</Label>
@@ -502,6 +546,40 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
         <Textarea id="address" name="address" autoComplete="street-address" placeholder="Full address" value={form.address} onChange={(e) => updateField("address", e.target.value)} rows={2} />
       </div>
 
+      {/* Email Management Section */}
+      {!isAdminView && (
+        <div className="pt-4 border-t border-border">
+          <h3 className="text-sm font-medium mb-3 flex items-center gap-2"><Users className="w-4 h-4" /> Email Management</h3>
+          <div className="bg-muted/50 p-4 rounded-lg border border-border flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wider">Current Login Email</p>
+                <p className="text-sm text-muted-foreground">{authUser?.email}</p>
+              </div>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowEmailDialog(true)}
+              >
+                Change Email
+              </Button>
+            </div>
+            
+            {pendingEmail && (
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-md flex gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-800">
+                  <p className="font-bold">Pending Confirmation</p>
+                  <p>A verification link was sent to <strong>{pendingEmail}</strong>.</p>
+                  <p className="mt-1">Please confirm within 30 minutes. You can still use your current email until verified.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Password Reset Section */}
       {!isAdminView && (
         <div className="pt-4 border-t border-border">
@@ -522,6 +600,53 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? "Saving..." : "Save Profile"}
       </Button>
+
+      {/* Change Email Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" />
+              Change Login Email
+            </DialogTitle>
+            <DialogDescription>
+              A verification link will be sent to your new email address.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="new_email">New Email Address</Label>
+              <Input 
+                id="new_email" 
+                type="email" 
+                placeholder="Enter new email" 
+                value={newEmail} 
+                onChange={(e) => setNewEmail(e.target.value)} 
+              />
+            </div>
+
+            <div className="bg-primary/5 border border-primary/10 p-4 rounded-lg text-xs space-y-2 text-primary/80">
+              <p className="font-bold flex items-center gap-1">
+                <Shield className="w-3 h-3" /> Security Policy:
+              </p>
+              <ul className="list-disc pl-4 space-y-1">
+                <li>You MUST verify the new email via the link sent to your inbox.</li>
+                <li>The verification link is valid for **30 minutes**.</li>
+                <li>Until confirmed, you must continue using your old email to login.</li>
+                <li>If the link expires, you'll need to start this process again.</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowEmailDialog(false)} disabled={loading}>Cancel</Button>
+            <Button onClick={handleEmailChange} disabled={loading || !newEmail}>
+              {loading ? "Processing..." : "Confirm & Send Link"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showReverifyDialog} onOpenChange={setShowReverifyDialog}>
         <DialogContent className="max-w-md">
