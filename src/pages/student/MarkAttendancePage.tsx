@@ -17,9 +17,10 @@ const MarkAttendancePage = () => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [classCode, setClassCode] = useState("");
-  const [step, setStep] = useState<"code" | "bio_verify" | "face_verify" | "done">("code");
+  const [step, setStep] = useState<"code" | "location_verify" | "bio_verify" | "face_verify" | "done">("code");
   const [currentClass, setCurrentClass] = useState<any>(null);
   const [activeCode, setActiveCode] = useState<any>(null);
+  const [locationConfig, setLocationConfig] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
   const [biometricStatus, setBiometricStatus] = useState<string | null>(null);
@@ -130,7 +131,65 @@ const MarkAttendancePage = () => {
 
     setActiveCode(codeData);
     setClassDetails({ ...currentClass, ...codeData });
-    setStep("bio_verify");
+
+    // Fetch location config
+    const { data: locConfig } = await supabase
+      .from("class_code_locations")
+      .select("*")
+      .eq("class_code_id", codeData.id)
+      .maybeSingle();
+
+    if (locConfig) {
+      setLocationConfig(locConfig);
+      setStep("location_verify");
+    } else {
+      setStep("bio_verify");
+    }
+  };
+
+  const handleVerifyLocation = async () => {
+    if (!locationConfig) return;
+    setVerifying(true);
+
+    try {
+      toast({ title: "Checking Location", description: "Verifying classroom presence..." });
+      const { getHighAccuracyLocation, calculateHaversineDistance } = await import("@/lib/locationUtils");
+      const studentLoc = await getHighAccuracyLocation();
+
+      if (studentLoc.accuracy > (locationConfig.accuracy_threshold || 100)) {
+        toast({
+          title: "Inaccurate GPS",
+          description: `Your GPS accuracy (${Math.round(studentLoc.accuracy)}m) is too low. Please move to a clearer spot.`,
+          variant: "destructive"
+        });
+        setVerifying(false);
+        return;
+      }
+
+      const distance = calculateHaversineDistance(
+        locationConfig.latitude,
+        locationConfig.longitude,
+        studentLoc.latitude,
+        studentLoc.longitude
+      );
+
+      if (distance <= locationConfig.radius) {
+        toast({ title: "Location Verified", description: `Within ${Math.round(distance)}m of classroom.` });
+        setStep("bio_verify");
+      } else {
+        playBeep();
+        toast({
+          title: "Out of Range",
+          description: `You are too far from the classroom (${Math.round(distance)}m away). Allowed: ${locationConfig.radius}m.`,
+          variant: "destructive"
+        });
+      }
+    } catch (err: any) {
+      playBeep();
+      toast({ title: "Location Error", description: err.message, variant: "destructive" });
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const handleVerifyBiometric = async () => {
@@ -342,10 +401,44 @@ return (
         </Card>
       )}
 
+      {step === "location_verify" && (
+        <Card className="shadow-card">
+          <CardHeader>
+            <CardTitle className="text-lg font-display text-center">Step 2: Location Verification</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6 py-8 flex flex-col items-center">
+            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-2">
+              {verifying ? <Loader2 className="w-12 h-12 animate-spin text-primary" /> : <MapPin className="w-12 h-12 text-primary" />}
+            </div>
+            <div className="text-center space-y-2">
+              <p className="font-bold text-lg">Classroom Proximity Check</p>
+              <p className="text-sm text-muted-foreground px-6">
+                Please allow location access to verify you are physically present in the classroom.
+              </p>
+            </div>
+            <div className="flex flex-col w-full gap-2 pt-4">
+              <Button
+                onClick={handleVerifyLocation}
+                className="w-full h-12 text-lg font-bold"
+                disabled={verifying}
+              >
+                {verifying ? "Checking Range..." : "Verify Location"}
+              </Button>
+              <Button variant="ghost" onClick={() => setStep("code")}>
+                Back
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              Required radius: {locationConfig?.radius}m | High accuracy GPS required.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {step === "bio_verify" && (
         <Card className="shadow-card">
           <CardHeader>
-            <CardTitle className="text-lg font-display text-center">Step 2: Biometric Verification</CardTitle>
+            <CardTitle className="text-lg font-display text-center">Step 3: Biometric Verification</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 py-8 flex flex-col items-center">
             <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mb-2">
@@ -365,7 +458,7 @@ return (
               >
                 {verifying ? "Verifying..." : "Scan Fingerprint"}
               </Button>
-              <Button variant="ghost" onClick={() => setStep("code")}>
+              <Button variant="ghost" onClick={() => setStep(locationConfig ? "location_verify" : "code")}>
                 Back
               </Button>
             </div>
@@ -376,7 +469,7 @@ return (
       {step === "face_verify" && (
         <Card className="shadow-card">
           <CardHeader>
-            <CardTitle className="text-lg font-display">Step 2: Identity Verification</CardTitle>
+            <CardTitle className="text-lg font-display">Step 4: Identity Verification</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-center">
             <div className="relative w-full aspect-square max-w-[320px] mx-auto rounded-xl overflow-hidden bg-black border-2 border-border">
@@ -409,7 +502,7 @@ return (
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("bio_verify")} className="flex-1" disabled={verifying}>
+              <Button variant="outline" onClick={() => setStep(locationConfig ? "location_verify" : "code")} className="flex-1" disabled={verifying}>
                 Back
               </Button>
               <Button onClick={captureAndVerify} className="flex-1" disabled={verifying}>

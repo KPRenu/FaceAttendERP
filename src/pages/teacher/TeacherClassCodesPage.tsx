@@ -252,22 +252,63 @@ const TeacherClassCodesPage = () => {
       return;
     }
 
+    setVerifying(true);
+    let locationData = null;
+
+    try {
+      toast({ title: "Capturing Location", description: "Fetching room coordinates..." });
+      const { getHighAccuracyLocation } = await import("@/lib/locationUtils");
+      locationData = await getHighAccuracyLocation();
+      
+      if (locationData.accuracy > 100) {
+        toast({ title: "GPS Inaccurate", description: "Please ensure you have a clear GPS signal.", variant: "destructive" });
+        setVerifying(false);
+        return;
+      }
+    } catch (locErr: any) {
+      toast({ title: "Location Error", description: locErr.message, variant: "destructive" });
+      setVerifying(false);
+      return;
+    }
+
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     const expiresAt = new Date(Date.now() + parseInt(form.duration) * 60 * 1000).toISOString();
 
-    const { error } = await supabase.from("class_codes").insert({
+    const { data: newCode, error } = await supabase.from("class_codes").insert({
       teacher_id: user.id,
       timetable_id: ttEntry.id,
       code,
       expires_at: expiresAt,
       slot_start_time: ttEntry.start_time,
       slot_end_time: ttEntry.end_time
-    });
+    }).select().single();
 
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    if (error) { 
+      toast({ title: "Error", description: error.message, variant: "destructive" }); 
+      setVerifying(false);
+      return; 
+    }
+
+    // Store location mapping
+    if (locationData && newCode) {
+      const { error: locError } = await supabase.from("class_code_locations").insert({
+        class_code_id: newCode.id,
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+        radius: 30, // Default 30 meters
+        accuracy_threshold: 100
+      });
+
+      if (locError) {
+        console.error("Failed to store location mapping:", locError);
+        toast({ title: "Warning", description: "Code generated, but location geofencing could not be set.", variant: "default" });
+      }
+    }
+
     speak("Code generated");
     toast({ title: "Code generated!", description: `Code: ${code}` });
     await fetchCodes();
+    setVerifying(false);
   };
 
   const copyCode = (code: string) => {
