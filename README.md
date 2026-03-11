@@ -58,9 +58,19 @@ A secure alternative to face recognition:
 
 ---
 
+### 📍 Location-Based Verification (Geofencing)
+Prevents remote and proxy attendance by enforcing physical presence:
+- **Dual-Coordinate Verification**: Matches student location with teacher's room coordinates.
+- **Precision Geofencing**: Configurable 150m radius around the classroom.
+- **Anti-Spoofing**: High-accuracy GPS threshold (300m accuracy) prevents simulated locations.
+- **Privacy First**: Temporary location access used only during the verification step.
+
+---
+
 ### 🧾 Attendance Integrity
 Each attendance record stores:
-- Student snapshot (if using Face)
+- Student snapshot (for face verification)
+- Geolocation metadata (latitude/longitude verification status)
 - Biometric verification status
 - Teacher snapshot
 - Timestamp
@@ -93,6 +103,12 @@ Critical profile changes trigger:
 ---
 
 # 🏗 System Architecture
+
+The attendance process follows a **Multi-Factor Verification** flow:
+1. **Class Code** (Knowledge-based)
+2. **Geofencing** (Location-based)
+3. **Biometrics** (Possession-based)
+4. **Face Matching** (Inherent-based)
 
 ```mermaid
 graph TD
@@ -284,6 +300,28 @@ sequenceDiagram
 
 ---
 
+### Location Verification (Geofencing) Workflow
+```mermaid
+sequenceDiagram
+    participant T as Teacher
+    participant S as Student
+    participant F as Frontend
+    participant D as Database
+
+    T->>F: Generates Code
+    F->>F: Capture Room Coordinates
+    F->>D: Store coordinates with Code
+    Note over T,D: Student Marks Attendance
+    S->>F: Enters Code
+    F->>F: Capture Student Location
+    F->>F: Verify Haversine Distance (<= 150m)
+    F->>F: Verify GPS Accuracy (<= 300m)
+    F-->>S: Location Verified
+    S->>F: Proceed to Biometric/Face
+```
+
+---
+
 # 🔗 API Endpoints
 
 ### Generate Face Embedding
@@ -304,6 +342,7 @@ sequenceDiagram
 - [ ] Attendance analytics dashboard
 - [ ] HRMS integration
 - [x] Biometric multi-factor authentication
+- [x] Location-based Geofencing security
 
 ---
 

@@ -48,6 +48,7 @@ requirements.txt
 
 .Hugging-Face
 
+.supabase/migrations/FaceAttendERP_complete_database.sql
 
 
 
