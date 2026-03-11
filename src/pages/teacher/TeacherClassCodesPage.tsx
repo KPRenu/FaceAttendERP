@@ -261,7 +261,7 @@ const TeacherClassCodesPage = () => {
       locationData = await getHighAccuracyLocation();
       
       if (locationData.accuracy > 150) {
-        toast({ title: "GPS Inaccurate", description: "Please ensure you have a clearer GPS signal (Accuracy > 1km).", variant: "destructive" });
+        toast({ title: "GPS Inaccurate", description: "Please ensure you have a clearer GPS signal (Accuracy > 150m).", variant: "destructive" });
         setVerifying(false);
         return;
       }
