@@ -471,7 +471,13 @@ const AdminUsersPage = () => {
     );
     const matchesRole = roleFilter === "all" || user.role === roleFilter;
     const matchesDept = deptFilter === "all" || user.department === deptFilter;
-    const matchesStatus = statusFilter === "all" || user.photo_status === statusFilter;
+    const matchesStatus = statusFilter === "all" || (
+      statusFilter === "pending" ? (user.photo_status === "pending" || user.biometric_status === "pending") :
+      statusFilter === "verified" ? (user.photo_status === "verified" && (user.biometric_status === "verified" || user.role === "admin")) :
+      statusFilter === "rejected" ? (user.photo_status === "rejected" || user.biometric_status === "rejected") :
+      statusFilter === "not_registered" ? (user.biometric_status === null && user.role !== "admin") :
+      false
+    );
 
     return matchesSearch && matchesRole && matchesDept && matchesStatus;
   });
@@ -539,6 +545,7 @@ const AdminUsersPage = () => {
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="verified">Verified</SelectItem>
                   <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="not_registered">Not Registered (Bio)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
