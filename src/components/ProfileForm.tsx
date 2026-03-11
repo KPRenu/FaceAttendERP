@@ -74,7 +74,7 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
         semester: initialData.semester ? String(initialData.semester) : "",
         section: initialData.section || "",
         teacher_id: initialData.teacher_id || "",
-        email: initialData.email || (!isAdminView && userId === authUser?.id ? authUser?.email : "") || "",
+        email: (!isAdminView && userId === authUser?.id) ? (authUser?.email || initialData.email || "") : (initialData.email || ""),
         role: initialData.role || role || "",
       });
       setAvatarPreview(initialData.avatar_url);
