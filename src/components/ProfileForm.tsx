@@ -53,6 +53,8 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
   const [newEmail, setNewEmail] = useState("");
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showReverifyDialog, setShowReverifyDialog] = useState(false);
+  const [showPhotoReverifyDialog, setShowPhotoReverifyDialog] = useState(false);
+  const [showPasswordConfirmDialog, setShowPasswordConfirmDialog] = useState(false);
   const [showAdminReverifyDialog, setShowAdminReverifyDialog] = useState(false);
   const [showRoleTransitionDialog, setShowRoleTransitionDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -143,12 +145,24 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
       return;
     }
 
+    // Photo Change Warning (Student/Teacher)
+    if (avatarFile && !isAdminView && (role === "student" || role === "teacher")) {
+      setShowPhotoReverifyDialog(true);
+      return;
+    }
+
     if (hasCriticalChanges) {
       if (!isAdminView && role === "admin") {
         setShowAdminReverifyDialog(true);
       } else {
         setShowReverifyDialog(true);
       }
+      return;
+    }
+
+    // Password Change Confirmation
+    if (newPassword && !isAdminView) {
+      setShowPasswordConfirmDialog(true);
     } else {
       saveProfile(false, emailChanged);
     }
@@ -699,6 +713,60 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
               const emailChanged = !isAdminView && form.email.trim().toLowerCase().replace(/\s/g, '') !== (authUser?.email || "").toLowerCase();
               saveProfile(true, emailChanged);
             }}>Save and Re-verify</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Photo Change Re-verification Warning */}
+      <Dialog open={showPhotoReverifyDialog} onOpenChange={setShowPhotoReverifyDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-warning">
+              <AlertTriangle className="w-5 h-5" />
+              Re-verification Required
+            </DialogTitle>
+            <div className="pt-2 text-sm text-muted-foreground">
+              <p>You are changing your profile photo.</p>
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg text-amber-800 font-medium my-3 space-y-2">
+                <p>⚠️ IMPORTANT:</p>
+                <ul className="list-disc pl-4 text-xs space-y-1">
+                  <li>Your account will be re-verified by the admin.</li>
+                  <li>Until verified, you **cannot** mark attendance.</li>
+                </ul>
+              </div>
+              Are you sure you want to proceed with this photo change?
+            </div>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 justify-end mt-4">
+            <Button variant="outline" onClick={() => setShowPhotoReverifyDialog(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => {
+              const emailChanged = !isAdminView && form.email.trim().toLowerCase().replace(/\s/g, '') !== (authUser?.email || "").toLowerCase();
+              setShowPhotoReverifyDialog(false);
+              saveProfile(true, emailChanged);
+            }}>Save and Re-verify</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Change Confirmation */}
+      <Dialog open={showPasswordConfirmDialog} onOpenChange={setShowPasswordConfirmDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-5 h-5 text-primary" />
+              Confirm Password Update
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              Are you sure you want to update your security password? This will change your login credentials immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 justify-end mt-4">
+            <Button variant="outline" onClick={() => setShowPasswordConfirmDialog(false)}>Cancel</Button>
+            <Button onClick={() => {
+              const emailChanged = !isAdminView && form.email.trim().toLowerCase().replace(/\s/g, '') !== (authUser?.email || "").toLowerCase();
+              setShowPasswordConfirmDialog(false);
+              saveProfile(false, emailChanged);
+            }}>Confirm & Update</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
