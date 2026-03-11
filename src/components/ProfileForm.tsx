@@ -344,6 +344,26 @@ const ProfileForm = ({ initialData, role, userId, onSuccess, isAdminView = false
     }
 
     setLoading(true);
+
+    // Proactive check for duplicate email in public profiles
+    const { data: existingProfile, error: checkError } = await supabase
+      .from("profiles")
+      .select("user_id")
+      .eq("email", cleanEmail)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error("Email availability check failed:", checkError);
+    } else if (existingProfile) {
+      toast({ 
+        title: "Email already in use", 
+        description: "This email address is already associated with another account. Please use a different email.", 
+        variant: "destructive" 
+      });
+      setLoading(false);
+      return;
+    }
+
     const { error: emailError } = await supabase.auth.updateUser({ email: cleanEmail });
     
     if (emailError) {

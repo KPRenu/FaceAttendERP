@@ -16,7 +16,7 @@ const AdminDashboard = () => {
       const [studentsRes, teachersRes, pendingRes, biometricRes, classesRes, issuesRes] = await Promise.all([
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "student"),
         supabase.from("user_roles").select("id", { count: "exact", head: true }).eq("role", "teacher"),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("photo_status", "pending").eq("profile_completed", true),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("photo_status", "pending"),
         supabase.from("user_biometrics").select("id", { count: "exact", head: true }).eq("status", "pending"),
         supabase.from("classes").select("id", { count: "exact", head: true }),
         supabase.from("issues")

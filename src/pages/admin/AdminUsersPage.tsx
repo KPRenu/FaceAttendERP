@@ -76,7 +76,7 @@ const AdminUsersPage = () => {
 
   const fetchUsers = async () => {
     setLoading(true);
-    const { data: profiles } = await supabase.from("profiles").select("*").eq("profile_completed", true);
+    const { data: profiles } = await supabase.from("profiles").select("*");
     if (profiles) {
       // Fetch roles for each user
       const userIds = profiles.map((p) => p.user_id);
