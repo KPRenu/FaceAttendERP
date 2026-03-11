@@ -69,6 +69,21 @@ CREATE TYPE "public"."app_role" AS ENUM (
 ALTER TYPE "public"."app_role" OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."delete_user_account"() RETURNS "void"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public'
+    AS $$
+BEGIN
+  -- Delete the user from auth.users using their own UID
+  -- The SECURITY DEFINER privilege allows this function to bypass standard RLS for auth.users
+  DELETE FROM auth.users WHERE id = auth.uid();
+END;
+$$;
+
+
+ALTER FUNCTION "public"."delete_user_account"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."delete_user_by_admin"("target_user_id" "uuid") RETURNS "void"
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -140,6 +155,23 @@ $$;
 ALTER FUNCTION "public"."handle_new_user"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."handle_user_email_update"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    AS $$
+BEGIN
+  IF OLD.email <> NEW.email THEN
+    UPDATE public.profiles
+    SET email = NEW.email
+    WHERE user_id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "public"."handle_user_email_update"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."has_role"("_user_id" "uuid", "_role" "public"."app_role") RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -171,11 +203,10 @@ ALTER FUNCTION "public"."is_teacher"() OWNER TO "postgres";
 
 CREATE OR REPLACE FUNCTION "public"."update_updated_at_column"() RETURNS "trigger"
     LANGUAGE "plpgsql"
-    SET "search_path" TO 'public'
     AS $$
 BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
+    NEW.updated_at = NOW();
+    RETURN NEW;
 END;
 $$;
 
@@ -209,6 +240,20 @@ CREATE TABLE IF NOT EXISTS "public"."attendance" (
 
 
 ALTER TABLE "public"."attendance" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."class_code_locations" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "class_code_id" "uuid" NOT NULL,
+    "latitude" double precision NOT NULL,
+    "longitude" double precision NOT NULL,
+    "radius" integer DEFAULT 150 NOT NULL,
+    "accuracy_threshold" integer DEFAULT 300 NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"()
+);
+
+
+ALTER TABLE "public"."class_code_locations" OWNER TO "postgres";
 
 
 CREATE TABLE IF NOT EXISTS "public"."class_codes" (
@@ -321,6 +366,24 @@ CREATE TABLE IF NOT EXISTS "public"."timetable" (
 ALTER TABLE "public"."timetable" OWNER TO "postgres";
 
 
+CREATE TABLE IF NOT EXISTS "public"."user_biometrics" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "credential_id" "text" NOT NULL,
+    "public_key" "text" NOT NULL,
+    "status" "text" DEFAULT 'pending'::"text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "device_name" "text",
+    "device_type" "text",
+    "active" boolean DEFAULT true,
+    CONSTRAINT "user_biometrics_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'verified'::"text", 'rejected'::"text"])))
+);
+
+
+ALTER TABLE "public"."user_biometrics" OWNER TO "postgres";
+
+
 CREATE TABLE IF NOT EXISTS "public"."user_roles" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "user_id" "uuid" NOT NULL,
@@ -341,6 +404,11 @@ ALTER TABLE ONLY "public"."attendance"
 
 ALTER TABLE ONLY "public"."attendance"
     ADD CONSTRAINT "attendance_slot_unique" UNIQUE ("student_id", "timetable_id", "date", "slot_start_time", "slot_end_time");
+
+
+
+ALTER TABLE ONLY "public"."class_code_locations"
+    ADD CONSTRAINT "class_code_locations_pkey" PRIMARY KEY ("id");
 
 
 
@@ -384,6 +452,16 @@ ALTER TABLE ONLY "public"."timetable"
 
 
 
+ALTER TABLE ONLY "public"."user_biometrics"
+    ADD CONSTRAINT "user_biometrics_credential_id_key" UNIQUE ("credential_id");
+
+
+
+ALTER TABLE ONLY "public"."user_biometrics"
+    ADD CONSTRAINT "user_biometrics_pkey" PRIMARY KEY ("id");
+
+
+
 ALTER TABLE ONLY "public"."user_roles"
     ADD CONSTRAINT "user_roles_pkey" PRIMARY KEY ("id");
 
@@ -410,6 +488,10 @@ CREATE OR REPLACE TRIGGER "update_profiles_updated_at" BEFORE UPDATE ON "public"
 
 
 
+CREATE OR REPLACE TRIGGER "update_user_biometrics_updated_at" BEFORE UPDATE ON "public"."user_biometrics" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at_column"();
+
+
+
 ALTER TABLE ONLY "public"."attendance"
     ADD CONSTRAINT "attendance_class_code_id_fkey" FOREIGN KEY ("class_code_id") REFERENCES "public"."class_codes"("id") ON DELETE SET NULL;
 
@@ -422,6 +504,11 @@ ALTER TABLE ONLY "public"."attendance"
 
 ALTER TABLE ONLY "public"."attendance"
     ADD CONSTRAINT "attendance_timetable_id_fkey" FOREIGN KEY ("timetable_id") REFERENCES "public"."timetable"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."class_code_locations"
+    ADD CONSTRAINT "class_code_locations_class_code_id_fkey" FOREIGN KEY ("class_code_id") REFERENCES "public"."class_codes"("id") ON DELETE CASCADE;
 
 
 
@@ -457,6 +544,11 @@ ALTER TABLE ONLY "public"."timetable"
 
 ALTER TABLE ONLY "public"."timetable"
     ADD CONSTRAINT "timetable_teacher_id_fkey" FOREIGN KEY ("teacher_id") REFERENCES "auth"."users"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."user_biometrics"
+    ADD CONSTRAINT "user_biometrics_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("user_id") ON DELETE CASCADE;
 
 
 
@@ -549,6 +641,14 @@ CREATE POLICY "Admins can update attendance" ON "public"."attendance" FOR UPDATE
 
 
 
+CREATE POLICY "Admins can update biometric status" ON "public"."user_biometrics" FOR UPDATE USING ((EXISTS ( SELECT 1
+   FROM "public"."user_roles"
+  WHERE (("user_roles"."user_id" = "auth"."uid"()) AND ("user_roles"."role" = 'admin'::"public"."app_role"))))) WITH CHECK ((EXISTS ( SELECT 1
+   FROM "public"."user_roles"
+  WHERE (("user_roles"."user_id" = "auth"."uid"()) AND ("user_roles"."role" = 'admin'::"public"."app_role")))));
+
+
+
 CREATE POLICY "Admins can update classes" ON "public"."classes" FOR UPDATE USING ("public"."has_role"("auth"."uid"(), 'admin'::"public"."app_role"));
 
 
@@ -562,6 +662,12 @@ CREATE POLICY "Admins can update subjects" ON "public"."subjects" FOR UPDATE USI
 
 
 CREATE POLICY "Admins can update timetable" ON "public"."timetable" FOR UPDATE USING ("public"."has_role"("auth"."uid"(), 'admin'::"public"."app_role"));
+
+
+
+CREATE POLICY "Admins can view all biometrics" ON "public"."user_biometrics" FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM "public"."user_roles"
+  WHERE (("user_roles"."user_id" = "auth"."uid"()) AND ("user_roles"."role" = 'admin'::"public"."app_role")))));
 
 
 
@@ -588,6 +694,20 @@ CREATE POLICY "Authenticated users can read teacher profiles" ON "public"."profi
 
 
 CREATE POLICY "Authenticated users can read teacher roles" ON "public"."user_roles" FOR SELECT TO "authenticated" USING (("role" = 'teacher'::"public"."app_role"));
+
+
+
+CREATE POLICY "Enable insert for authenticated users" ON "public"."class_code_locations" FOR INSERT WITH CHECK (("auth"."role"() = 'authenticated'::"text"));
+
+
+
+CREATE POLICY "Enable read access for all users" ON "public"."class_code_locations" FOR SELECT USING (true);
+
+
+
+CREATE POLICY "Enable update for users who own the class code" ON "public"."class_code_locations" FOR UPDATE USING ((EXISTS ( SELECT 1
+   FROM "public"."class_codes"
+  WHERE (("class_codes"."id" = "class_code_locations"."class_code_id") AND ("class_codes"."teacher_id" = "auth"."uid"())))));
 
 
 
@@ -647,6 +767,10 @@ CREATE POLICY "Teachers can update their own timetable entries" ON "public"."tim
 
 
 
+CREATE POLICY "Users can delete their own biometrics" ON "public"."user_biometrics" FOR DELETE USING (("auth"."uid"() = "user_id"));
+
+
+
 CREATE POLICY "Users can insert own issues" ON "public"."issues" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
 
 
@@ -656,6 +780,10 @@ CREATE POLICY "Users can insert own profile" ON "public"."profiles" FOR INSERT W
 
 
 CREATE POLICY "Users can insert own role" ON "public"."user_roles" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can insert their own biometrics" ON "public"."user_biometrics" FOR INSERT WITH CHECK (("auth"."uid"() = "user_id"));
 
 
 
@@ -679,7 +807,18 @@ CREATE POLICY "Users can update own profile" ON "public"."profiles" FOR UPDATE U
 
 
 
+CREATE POLICY "Users can update their own biometrics active status" ON "public"."user_biometrics" FOR UPDATE USING (("auth"."uid"() = "user_id")) WITH CHECK (("auth"."uid"() = "user_id"));
+
+
+
+CREATE POLICY "Users can view their own biometrics" ON "public"."user_biometrics" FOR SELECT USING (("auth"."uid"() = "user_id"));
+
+
+
 ALTER TABLE "public"."attendance" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."class_code_locations" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."class_codes" ENABLE ROW LEVEL SECURITY;
@@ -698,6 +837,9 @@ ALTER TABLE "public"."subjects" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."timetable" ENABLE ROW LEVEL SECURITY;
+
+
+ALTER TABLE "public"."user_biometrics" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."user_roles" ENABLE ROW LEVEL SECURITY;
@@ -1174,6 +1316,12 @@ GRANT ALL ON FUNCTION "public"."cosine_distance"("public"."vector", "public"."ve
 
 
 
+GRANT ALL ON FUNCTION "public"."delete_user_account"() TO "anon";
+GRANT ALL ON FUNCTION "public"."delete_user_account"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."delete_user_account"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."delete_user_by_admin"("target_user_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."delete_user_by_admin"("target_user_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."delete_user_by_admin"("target_user_id" "uuid") TO "service_role";
@@ -1315,6 +1463,12 @@ GRANT ALL ON FUNCTION "public"."hamming_distance"(bit, bit) TO "service_role";
 GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "anon";
 GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."handle_new_user"() TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "public"."handle_user_email_update"() TO "anon";
+GRANT ALL ON FUNCTION "public"."handle_user_email_update"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."handle_user_email_update"() TO "service_role";
 
 
 
@@ -1756,6 +1910,12 @@ GRANT ALL ON TABLE "public"."attendance" TO "service_role";
 
 
 
+GRANT ALL ON TABLE "public"."class_code_locations" TO "anon";
+GRANT ALL ON TABLE "public"."class_code_locations" TO "authenticated";
+GRANT ALL ON TABLE "public"."class_code_locations" TO "service_role";
+
+
+
 GRANT ALL ON TABLE "public"."class_codes" TO "anon";
 GRANT ALL ON TABLE "public"."class_codes" TO "authenticated";
 GRANT ALL ON TABLE "public"."class_codes" TO "service_role";
@@ -1789,6 +1949,12 @@ GRANT ALL ON TABLE "public"."subjects" TO "service_role";
 GRANT ALL ON TABLE "public"."timetable" TO "anon";
 GRANT ALL ON TABLE "public"."timetable" TO "authenticated";
 GRANT ALL ON TABLE "public"."timetable" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."user_biometrics" TO "anon";
+GRANT ALL ON TABLE "public"."user_biometrics" TO "authenticated";
+GRANT ALL ON TABLE "public"."user_biometrics" TO "service_role";
 
 
 

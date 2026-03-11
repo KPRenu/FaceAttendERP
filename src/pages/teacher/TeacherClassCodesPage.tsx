@@ -260,8 +260,9 @@ const TeacherClassCodesPage = () => {
       const { getHighAccuracyLocation } = await import("@/lib/locationUtils");
       locationData = await getHighAccuracyLocation();
       
-      if (locationData.accuracy > 150) {
-        toast({ title: "GPS Inaccurate", description: "Please ensure you have a clearer GPS signal (Accuracy > 150m).", variant: "destructive" });
+      //checking GPS accuracy and accuracy can be changed in the future
+      if (locationData.accuracy > 300) {
+        toast({ title: "GPS Inaccurate", description: "Please ensure you have a clearer GPS signal (Accuracy > 300m).", variant: "destructive" });
         setVerifying(false);
         return;
       }
@@ -295,8 +296,8 @@ const TeacherClassCodesPage = () => {
         class_code_id: newCode.id,
         latitude: locationData.latitude,
         longitude: locationData.longitude,
-        radius: 100, // Valid within 100m
-        accuracy_threshold: 150 // Accept signals with up to 150m error
+        radius: 150, // Valid within 150m
+        accuracy_threshold: 300 // Accept signals with up to 300m error
       });
 
       if (locError) {
