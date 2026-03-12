@@ -11,6 +11,7 @@ import { ClipboardCheck, CheckCircle, XCircle, Pencil, Filter, Trash2, RotateCcw
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { exportToExcel } from "@/lib/excelUtils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -180,6 +181,25 @@ const AttendancePage = () => {
     setSelectedIds(newSelected);
   };
 
+  const handleExport = () => {
+    const exportData = filteredRecords.map(r => ({
+      'Date': new Date(r.date).toLocaleDateString(),
+      'Class': r.class_name || "—",
+      'Student': r.student_name || "—",
+      'Department': r.department || "—",
+      'Semester': r.semester || "—",
+      'Subject': r.subject_name || "—",
+      'Teacher': r.teacher_name || "—",
+      'Time Slot': r.slot_start_time && r.slot_end_time
+        ? `${formatTime12h(r.slot_start_time)} - ${formatTime12h(r.slot_end_time)}`
+        : "—",
+      'Status': r.status
+    }));
+
+    exportToExcel(exportData, `Attendance_Report_${new Date().toISOString().split('T')[0]}`);
+    toast({ title: "Report Exported", description: "Your attendance report is being downloaded." });
+  };
+
   useEffect(() => {
     let isMounted = true;
     const fetch = async () => {
@@ -321,7 +341,12 @@ const AttendancePage = () => {
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-display font-bold text-foreground">Attendance Report</h2>
-          <p className="text-muted-foreground mt-1">View your attendance records</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-1">
+            <p className="text-muted-foreground">View your attendance records</p>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <RotateCcw className="w-4 h-4 mr-2 rotate-180" /> Export Report
+            </Button>
+          </div>
         </div>
 
         {(role === "student" || role === "admin") && (

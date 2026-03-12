@@ -21,6 +21,7 @@ import {
   DialogFooter, 
   DialogDescription 
 } from "@/components/ui/dialog";
+import { exportToExcel } from "@/lib/excelUtils";
 
 interface StudentProfile {
   user_id: string;
@@ -246,6 +247,22 @@ const TeacherStudentsPage = () => {
     }
   };
 
+  const handleExportAttendance = () => {
+    const exportData = filteredAttendance.map(r => ({
+      'Date': new Date(r.date).toLocaleDateString(),
+      'Class': r.class_name || "—",
+      'Student': r.student_name || "—",
+      'Subject': r.subject_name || "—",
+      'Time Slot': r.slot_start_time && r.slot_end_time
+        ? `${formatTime12h(r.slot_start_time)} - ${formatTime12h(r.slot_end_time)}`
+        : "—",
+      'Status': r.status
+    }));
+
+    exportToExcel(exportData, `Teacher_Attendance_Report_${new Date().toISOString().split('T')[0]}`);
+    toast({ title: "Report Exported", description: "Your attendance report is being downloaded." });
+  };
+
   // --- Filter Logic ---
 
   // Students Tab Filter
@@ -366,7 +383,14 @@ const TeacherStudentsPage = () => {
             </div>
 
             <Card className="shadow-card">
-              <CardHeader><CardTitle className="text-lg font-display flex items-center gap-2"><ClipboardCheck className="w-5 h-5" /> Records ({filteredAttendance.length})</CardTitle></CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                <CardTitle className="text-lg font-display flex items-center gap-2">
+                  <ClipboardCheck className="w-5 h-5" /> Records ({filteredAttendance.length})
+                </CardTitle>
+                <Button variant="outline" size="sm" onClick={handleExportAttendance}>
+                  <RotateCcw className="w-4 h-4 mr-2 rotate-180" /> Export Report
+                </Button>
+              </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
                   <div className="md:col-span-1"><Input placeholder="Search student..." value={attSearchQuery} onChange={(e) => setAttSearchQuery(e.target.value)} /></div>
