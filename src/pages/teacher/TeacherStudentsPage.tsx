@@ -6,10 +6,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Users, Filter, ClipboardCheck, CheckCircle, XCircle } from "lucide-react";
+import { Users, Filter, ClipboardCheck, CheckCircle, XCircle, Pencil, RotateCcw, Check, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter, 
+  DialogDescription 
+} from "@/components/ui/dialog";
 
 interface StudentProfile {
   user_id: string;
@@ -53,6 +64,9 @@ const TeacherStudentsPage = () => {
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
 
   // Student Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -151,6 +165,86 @@ const TeacherStudentsPage = () => {
     };
     fetch();
   }, [user]);
+
+  const handleStatusToggle = async (record: AttendanceRecord) => {
+    try {
+      setUpdatingId(record.id);
+      const newStatus = record.status === "present" ? "absent" : "present";
+
+      const { error } = await supabase
+        .from("attendance")
+        .update({ status: newStatus })
+        .eq("id", record.id);
+
+      if (error) throw error;
+
+      setAttendanceRecords(prev => 
+        prev.map(r => r.id === record.id ? { ...r, status: newStatus } : r)
+      );
+
+      toast({
+        title: "Status updated",
+        description: `Marked as ${newStatus}`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Update Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredAttendance.length && filteredAttendance.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredAttendance.map(r => r.id)));
+    }
+  };
+
+  const handleBulkStatusUpdate = async (newStatus: string) => {
+    if (selectedIds.size === 0) return;
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from("attendance")
+        .update({ status: newStatus })
+        .in("id", Array.from(selectedIds));
+
+      if (error) throw error;
+
+      setAttendanceRecords(prev => 
+        prev.map(r => selectedIds.has(r.id) ? { ...r, status: newStatus } : r)
+      );
+
+      toast({
+        title: "Bulk Update Successful",
+        description: `Marked ${selectedIds.size} records as ${newStatus}.`,
+      });
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      toast({
+        title: "Bulk Update Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // --- Filter Logic ---
 
@@ -292,23 +386,68 @@ const TeacherStudentsPage = () => {
                   </Select>
                 </div>
 
+                {selectedIds.size > 0 && (
+                  <div className="flex items-center justify-between bg-primary/5 p-3 rounded-lg border border-primary/20 mb-6 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                        {selectedIds.size} selected
+                      </Badge>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())} className="h-8 text-xs">
+                        <RotateCcw className="w-3 h-3 mr-1" /> Clear
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        className="bg-success hover:bg-success/90 h-8 text-xs"
+                        onClick={() => handleBulkStatusUpdate("present")}
+                        disabled={loading}
+                      >
+                        <Check className="w-3 h-3 mr-1" /> Mark Present
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-8 text-xs"
+                        onClick={() => handleBulkStatusUpdate("absent")}
+                        disabled={loading}
+                      >
+                        <X className="w-3 h-3 mr-1" /> Mark Absent
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {loading ? <p className="text-center py-8 text-muted-foreground">Loading...</p> : filteredAttendance.length === 0 ? (
                   <p className="text-center py-8 text-muted-foreground">No records match your filters.</p>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={selectedIds.size === filteredAttendance.length && filteredAttendance.length > 0}
+                            onCheckedChange={toggleSelectAll}
+                          />
+                        </TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Class</TableHead>
                         <TableHead>Student</TableHead>
                         <TableHead>Subject</TableHead>
                         <TableHead>Time Slot</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredAttendance.map((r) => (
-                        <TableRow key={r.id}>
+                        <TableRow key={r.id} className={selectedIds.has(r.id) ? "bg-primary/5" : ""}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedIds.has(r.id)}
+                              onCheckedChange={() => toggleSelect(r.id)}
+                            />
+                          </TableCell>
                           <TableCell>{new Date(r.date).toLocaleDateString()}</TableCell>
                           <TableCell>{r.class_name || "—"}</TableCell>
                           <TableCell>{r.student_name || "—"}</TableCell>
@@ -320,9 +459,20 @@ const TeacherStudentsPage = () => {
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className={r.status === "present" ? "border-success text-success" : "border-destructive text-destructive"}>
-                              {r.status === "present" ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
                               {r.status}
                             </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0" 
+                              disabled={updatingId === r.id}
+                              onClick={() => handleStatusToggle(r)}
+                              title="Toggle Status"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
