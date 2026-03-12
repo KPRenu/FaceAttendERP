@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, Calendar, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Calendar, Search, FileUp } from "lucide-react";
 import { formatTime } from "@/lib/utils";
+import ImportDialog from "@/components/admin/ImportDialog";
+import { validateTimetableData } from "@/lib/excelUtils";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -42,6 +44,10 @@ const AdminTimetablePage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<TimetableEntry | null>(null);
   const [form, setForm] = useState({ subject_id: "", teacher_id: "", day_of_week: "", start_time: "", end_time: "", room_no: "" });
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [allClasses, setAllClasses] = useState<ClassItem[]>([]);
+  const [allSubjects, setAllSubjects] = useState<SubjectItem[]>([]);
+  const [allTeachers, setAllTeachers] = useState<any[]>([]);
 
   useEffect(() => {
     const fetch = async () => {
@@ -51,12 +57,15 @@ const AdminTimetablePage = () => {
         supabase.from("user_roles").select("user_id").eq("role", "teacher"),
       ]);
       setClasses((c.data || []) as ClassItem[]);
+      setAllClasses((c.data || []) as ClassItem[]);
       setSubjects((s.data || []) as SubjectItem[]);
+      setAllSubjects((s.data || []) as SubjectItem[]);
       if (t.data) {
         const ids = t.data.map((r) => r.user_id);
         if (ids.length > 0) {
-          const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, department").in("user_id", ids);
+          const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, department, email").in("user_id", ids);
           setTeachers((profiles || []) as TeacherProfile[]);
+          setAllTeachers(profiles || []);
         }
       }
     };
@@ -117,7 +126,34 @@ const AdminTimetablePage = () => {
     setEntries((data || []) as TimetableEntry[]);
   };
 
-  if (role !== "admin") return null;
+  const handleImportTimetable = async (data: any[]) => {
+    const { error } = await supabase.from("timetable").insert(data);
+    if (error) throw error;
+    if (selectedClass) {
+      const { data: entries } = await supabase.from("timetable").select("*").eq("class_id", selectedClass).eq("is_deleted", false);
+      setEntries((entries || []) as TimetableEntry[]);
+    }
+  };
+
+  const validateTimetable = (rows: any[]) => {
+    const teachersMap = Object.fromEntries(allTeachers.map(t => [t.email?.toLowerCase() || "", t.user_id]));
+    const classesMap = Object.fromEntries(allClasses.map(c => [c.class_name, c.id]));
+    const subjectsMap = Object.fromEntries(allSubjects.map(s => [s.subject_name, s.id]));
+    
+    return validateTimetableData(rows, teachersMap, classesMap, subjectsMap);
+  };
+
+  const TIMETABLE_TEMPLATE = [
+    { 
+      "Teacher Email": "teacher@example.com", 
+      "Class Name": "CSE-5A", 
+      "Subject Name": "Data Structures", 
+      "Day": "Monday", 
+      "Start Time": "09:00", 
+      "End Time": "10:00", 
+      "Room No": "101" 
+    }
+  ];
 
   return (
     <DashboardLayout>
@@ -200,9 +236,14 @@ const AdminTimetablePage = () => {
                       {selectedClassData?.class_name}
                     </h3>
                   </div>
-                  <Button onClick={() => openNew()} size="sm" className="shadow-sm">
-                    <Plus className="w-4 h-4 mr-2" /> Add Entry
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
+                      <FileUp className="w-4 h-4 mr-2" /> Import
+                    </Button>
+                    <Button onClick={() => openNew()} size="sm" className="shadow-sm">
+                      <Plus className="w-4 h-4 mr-2" /> Add Entry
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -330,6 +371,16 @@ const AdminTimetablePage = () => {
             </div>
           </DialogContent>
         </Dialog>
+
+        <ImportDialog
+          open={importDialogOpen}
+          onOpenChange={setImportDialogOpen}
+          title="Import Timetable Entries"
+          onImport={handleImportTimetable}
+          validateData={validateTimetable}
+          templateData={TIMETABLE_TEMPLATE}
+          templateFilename="timetable_template.xlsx"
+        />
       </div>
     </DashboardLayout>
   );

@@ -10,9 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, BookOpen, RotateCcw, Check, X, Settings2 } from "lucide-react";
+import { Plus, Pencil, Trash2, BookOpen, RotateCcw, Check, X, Settings2, FileUp } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import ImportDialog from "@/components/admin/ImportDialog";
+import { validateSubjectData } from "@/lib/excelUtils";
 
 const DEPARTMENTS = ["CSE", "ECE", "ME", "EEE", "CE", "ISE", "AI&ML"];
 const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -50,6 +52,7 @@ const AdminSubjectsPage = () => {
     applyDept: false,
     applySem: false
   });
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const fetchSubjects = async () => {
     setLoading(true);
@@ -162,6 +165,17 @@ const AdminSubjectsPage = () => {
     }
   };
 
+  const handleImportSubjects = async (data: any[]) => {
+    const { error } = await supabase.from("subjects").insert(data);
+    if (error) throw error;
+    fetchSubjects();
+  };
+
+  const SUBJECT_TEMPLATE = [
+    { "Subject Name": "Mathematics-III", "Subject Code": "21MAT31", "Department": "CSE", "Semester": 3 },
+    { "Subject Name": "Data Structures", "Subject Code": "21CS32", "Department": "CSE", "Semester": 3 }
+  ];
+
   const toggleSelectAll = () => {
     if (selectedIds.size === filteredSubjects.length && filteredSubjects.length > 0) {
       setSelectedIds(new Set());
@@ -200,7 +214,12 @@ const AdminSubjectsPage = () => {
               </Badge>
             </div>
           </div>
-          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Add Subject</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+              <FileUp className="w-4 h-4 mr-2" /> Import
+            </Button>
+            <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Add Subject</Button>
+          </div>
         </div>
         <Card className="shadow-card">
           <CardContent className="pt-6">
@@ -448,6 +467,16 @@ const AdminSubjectsPage = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ImportDialog
+          open={importDialogOpen}
+          onOpenChange={setImportDialogOpen}
+          title="Import Subjects"
+          onImport={handleImportSubjects}
+          validateData={validateSubjectData}
+          templateData={SUBJECT_TEMPLATE}
+          templateFilename="subjects_template.xlsx"
+        />
       </div>
     </DashboardLayout>
   );

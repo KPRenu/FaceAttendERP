@@ -10,9 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, Trash2, BookOpen, RotateCcw, Check, X, Settings2 } from "lucide-react";
+import { Plus, Pencil, Trash2, BookOpen, RotateCcw, Check, X, Settings2, FileUp } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import ImportDialog from "@/components/admin/ImportDialog";
+import { validateClassData } from "@/lib/excelUtils";
 
 const DEPARTMENTS = ["CSE", "ECE", "ME", "EEE", "CE", "ISE", "AI&ML"];
 const SECTIONS = ["A", "B", "C"];
@@ -54,6 +56,7 @@ const AdminClassesPage = () => {
     applySection: false,
     applySem: false
   });
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const fetchClasses = async () => {
     setLoading(true);
@@ -180,6 +183,17 @@ const AdminClassesPage = () => {
     }
   };
 
+  const handleImportClasses = async (data: any[]) => {
+    const { error } = await supabase.from("classes").insert(data);
+    if (error) throw error;
+    fetchClasses();
+  };
+
+  const CLASS_TEMPLATE = [
+    { "Class Name": "CSE-5A", "Department": "CSE", "Section": "A", "Semester": 5 },
+    { "Class Name": "ECE-3B", "Department": "ECE", "Section": "B", "Semester": 3 }
+  ];
+
   const toggleSelectAll = () => {
     if (selectedIds.size === filteredClasses.length && filteredClasses.length > 0) {
       setSelectedIds(new Set());
@@ -218,7 +232,12 @@ const AdminClassesPage = () => {
               </Badge>
             </div>
           </div>
-          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Add Class</Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+              <FileUp className="w-4 h-4 mr-2" /> Import
+            </Button>
+            <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Add Class</Button>
+          </div>
         </div>
 
         <Card className="shadow-card">
@@ -512,6 +531,16 @@ const AdminClassesPage = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <ImportDialog
+          open={importDialogOpen}
+          onOpenChange={setImportDialogOpen}
+          title="Import Classes"
+          onImport={handleImportClasses}
+          validateData={validateClassData}
+          templateData={CLASS_TEMPLATE}
+          templateFilename="classes_template.xlsx"
+        />
       </div>
     </DashboardLayout>
   );
