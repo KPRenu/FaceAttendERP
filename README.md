@@ -92,6 +92,15 @@ Teachers can:
 Admins can:
 - Manage users, classes, and subjects.
 - Resolve attendance issues and disputes.
+- **Bulk Data Import**: Automate creation of classes, subjects, and timetable entries via Excel templates.
+
+---
+
+### 📊 Attendance Reporting & Export
+Dynamic reporting for all user roles:
+- **Filtered Reports**: Filter records by date, class, subject, status, department, and teacher.
+- **Excel Export**: Download filtered attendance data as professional Excel reports (`.xlsx`).
+- **Real-time Updates**: Live sync with database changes for instant reporting.
 
 ---
 
@@ -128,6 +137,7 @@ graph TD
 - **TailwindCSS**
 - **Lucide Icons**
 - **WebAuthn API** (Biometrics)
+- **XLSX (SheetJS)** (Excel Import/Export)
 
 ### Backend (AI)
 - **Python** & **FastAPI**
@@ -343,6 +353,8 @@ sequenceDiagram
 - [ ] HRMS integration
 - [x] Biometric multi-factor authentication
 - [x] Location-based Geofencing security
+- [x] Excel-based bulk data import (Admin)
+- [x] Attendance report export to Excel
 
 ---
 
